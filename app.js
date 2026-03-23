@@ -6,6 +6,7 @@
  * @typedef ShuffleItem
  * @property {string} uri
  * @property {ItemType} type
+ * @property {string} title
  */
 
 /**
@@ -70,6 +71,7 @@ async function bootstrap() {
   await handleAuthRedirect();
   renderItemList();
   refreshAuthStatus();
+  await ensureStoredItemTitles();
 }
 
 function hookEvents() {
@@ -83,7 +85,7 @@ function hookEvents() {
     setPlaybackStatus('Disconnected from Spotify.');
   });
 
-  el.addForm.addEventListener('submit', (event) => {
+  el.addForm.addEventListener('submit', async (event) => {
     event.preventDefault();
     const parsed = parseSpotifyUri(el.itemUri.value.trim());
     if (!parsed) {
@@ -95,7 +97,19 @@ function hookEvents() {
       setPlaybackStatus('Item is already in your list.');
       return;
     }
-    items.push(parsed);
+    const token = getToken();
+    if (!token) {
+      setPlaybackStatus('Connect Spotify first so the app can load item titles.');
+      return;
+    }
+
+    const titledItem = await withItemTitle(parsed, token);
+    if (!titledItem) {
+      setPlaybackStatus('Unable to load title for that item. Please try another URI.');
+      return;
+    }
+
+    items.push(titledItem);
     saveItems(items);
     el.itemUri.value = '';
     renderItemList();
@@ -123,6 +137,36 @@ function refreshAuthStatus() {
   const expiresMs = Number(localStorage.getItem(STORAGE_KEYS.tokenExpiry) ?? 0);
   const minutes = Math.max(0, Math.floor((expiresMs - Date.now()) / 60000));
   setAuthStatus(`Connected. Token expires in about ${minutes} minute(s).`);
+}
+
+async function ensureStoredItemTitles() {
+  const items = getItems();
+  if (items.length === 0) return;
+
+  const token = getToken();
+  if (!token) return;
+
+  let changed = false;
+  const updated = [];
+  for (const item of items) {
+    if (item.title) {
+      updated.push(item);
+      continue;
+    }
+
+    const titledItem = await withItemTitle(item, token);
+    if (!titledItem) {
+      updated.push({ ...item, title: item.uri });
+    } else {
+      updated.push(titledItem);
+    }
+    changed = true;
+  }
+
+  if (changed) {
+    saveItems(updated);
+    renderItemList();
+  }
 }
 
 /** @param {string} message */
@@ -233,13 +277,19 @@ function getItems() {
   try {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter(
-      (item) =>
-        item &&
-        typeof item === 'object' &&
-        (item.type === 'album' || item.type === 'playlist') &&
-        typeof item.uri === 'string',
-    );
+    return parsed
+      .filter(
+        (item) =>
+          item &&
+          typeof item === 'object' &&
+          (item.type === 'album' || item.type === 'playlist') &&
+          typeof item.uri === 'string',
+      )
+      .map((item) => ({
+        type: item.type,
+        uri: item.uri,
+        title: typeof item.title === 'string' ? item.title : item.uri,
+      }));
   } catch {
     return [];
   }
@@ -257,7 +307,7 @@ function renderItemList() {
   for (const item of items) {
     const li = document.createElement('li');
     const text = document.createElement('span');
-    text.textContent = item.uri;
+    text.textContent = item.title ? `${item.title} (${item.type})` : `${item.uri} (${item.type})`;
 
     const actions = document.createElement('div');
     actions.className = 'row';
@@ -356,8 +406,35 @@ async function playCurrentItem() {
   );
 
   setPlaybackStatus(
-    `Now playing ${current.type} ${session.index + 1} of ${session.queue.length}: ${current.uri}`,
+    `Now playing ${current.type} ${session.index + 1} of ${session.queue.length}: ${current.title}`,
   );
+}
+
+/**
+ * @param {{uri: string; type: ItemType; title?: string}} item
+ * @param {string} token
+ * @returns {Promise<ShuffleItem | null>}
+ */
+async function withItemTitle(item, token) {
+  const id = spotifyIdFromUri(item.uri);
+  if (!id) return null;
+
+  const path = item.type === 'album' ? `/albums/${id}` : `/playlists/${id}`;
+  const response = await spotifyApi(path, { method: 'GET' }, token, false);
+  if (!response.ok) return null;
+
+  /** @type {{name?: string}} */
+  const data = await response.json();
+  const title = (data.name ?? '').trim();
+  if (!title) return null;
+
+  return { uri: item.uri, type: item.type, title };
+}
+
+/** @param {string} uri */
+function spotifyIdFromUri(uri) {
+  const match = uri.match(/^spotify:(album|playlist):([a-zA-Z0-9]+)$/);
+  return match ? match[2] : null;
 }
 
 function startMonitorLoop() {
@@ -428,7 +505,7 @@ function parseSpotifyUri(raw) {
 
   const uriMatch = raw.match(/^spotify:(album|playlist):([a-zA-Z0-9]+)$/);
   if (uriMatch) {
-    return { type: /** @type {ItemType} */ (uriMatch[1]), uri: raw };
+    return { type: /** @type {ItemType} */ (uriMatch[1]), uri: raw, title: '' };
   }
 
   try {
@@ -440,7 +517,7 @@ function parseSpotifyUri(raw) {
 
     const [, type, id] = ['', segments[0], segments[1]];
     if ((type === 'album' || type === 'playlist') && /^[a-zA-Z0-9]+$/.test(id)) {
-      return { type, uri: `spotify:${type}:${id}` };
+      return { type, uri: `spotify:${type}:${id}`, title: '' };
     }
   } catch {
     // not a URL
