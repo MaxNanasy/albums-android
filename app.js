@@ -465,7 +465,7 @@ async function fetchPlaylistAlbums(playlistId, token) {
   /** @type {Map<string, ShuffleItem>} */
   const albumsByUri = new Map();
   let offset = 0;
-  const limit = 100;
+  const limit = 50;
 
   while (true) {
     const params = new URLSearchParams({
