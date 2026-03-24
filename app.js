@@ -544,10 +544,7 @@ async function fetchPlaylistAlbums(playlistId, token) {
 async function fetchPlaylistAlbumsFromPlaylistObject(playlistId, token, original403Details) {
   /** @type {Map<string, ShuffleItem>} */
   const albumsByUri = new Map();
-  const firstParams = new URLSearchParams({
-    fields: 'tracks.items(track(album(uri,name))),tracks.next',
-    market: 'from_token',
-  });
+  const firstParams = new URLSearchParams({ market: 'from_token', limit: '50' });
   let nextPath = `/playlists/${playlistId}?${firstParams.toString()}`;
 
   while (nextPath) {
@@ -562,9 +559,9 @@ async function fetchPlaylistAlbumsFromPlaylistObject(playlistId, token, original
       };
     }
 
-    /** @type {{tracks?: {items?: Array<{track?: {album?: {uri?: string; name?: string} | null} | null}>; next?: string | null}}} */
+    /** @type {{tracks?: {items?: Array<{track?: {album?: {uri?: string; name?: string} | null} | null}>; next?: string | null}; items?: Array<{track?: {album?: {uri?: string; name?: string} | null} | null}>; next?: string | null}} */
     const data = await response.json();
-    const tracks = data?.tracks?.items ?? [];
+    const tracks = data?.tracks?.items ?? data?.items ?? [];
     for (const item of tracks) {
       const albumUri = item?.track?.album?.uri ?? '';
       const albumName = (item?.track?.album?.name ?? '').trim();
@@ -574,7 +571,7 @@ async function fetchPlaylistAlbumsFromPlaylistObject(playlistId, token, original
       }
     }
 
-    const nextUrl = data?.tracks?.next ?? null;
+    const nextUrl = data?.tracks?.next ?? data?.next ?? null;
     nextPath = nextUrl ? spotifyApiPathFromAbsoluteUrl(nextUrl) : null;
     if (nextUrl && !nextPath) {
       return {
