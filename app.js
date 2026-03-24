@@ -559,9 +559,9 @@ async function fetchPlaylistAlbumsFromPlaylistObject(playlistId, token, original
       };
     }
 
-    /** @type {{tracks?: {items?: Array<{track?: {album?: {uri?: string; name?: string} | null} | null}>; next?: string | null}; items?: Array<{track?: {album?: {uri?: string; name?: string} | null} | null}>; next?: string | null}} */
+    /** @type {{tracks?: {items?: unknown; next?: string | null} | unknown; items?: unknown; next?: string | null}} */
     const data = await response.json();
-    const tracks = data?.tracks?.items ?? data?.items ?? [];
+    const { items: tracks, nextUrl } = extractPlaylistTrackItemsAndNext(data);
     for (const item of tracks) {
       const albumUri = item?.track?.album?.uri ?? '';
       const albumName = (item?.track?.album?.name ?? '').trim();
@@ -571,7 +571,6 @@ async function fetchPlaylistAlbumsFromPlaylistObject(playlistId, token, original
       }
     }
 
-    const nextUrl = data?.tracks?.next ?? data?.next ?? null;
     nextPath = nextUrl ? spotifyApiPathFromAbsoluteUrl(nextUrl) : null;
     if (nextUrl && !nextPath) {
       return {
@@ -582,6 +581,26 @@ async function fetchPlaylistAlbumsFromPlaylistObject(playlistId, token, original
   }
 
   return { albums: [...albumsByUri.values()], errorMessage: null };
+}
+
+/**
+ * @param {{tracks?: {items?: unknown; next?: string | null} | unknown; items?: unknown; next?: string | null}} payload
+ * @returns {{items: Array<{track?: {album?: {uri?: string; name?: string} | null} | null}>; nextUrl: string | null}}
+ */
+function extractPlaylistTrackItemsAndNext(payload) {
+  if (payload?.tracks && typeof payload.tracks === 'object' && !Array.isArray(payload.tracks)) {
+    const nestedItems = /** @type {{items?: unknown; next?: string | null}} */ (payload.tracks).items;
+    const nestedNext = /** @type {{items?: unknown; next?: string | null}} */ (payload.tracks).next;
+    return {
+      items: Array.isArray(nestedItems) ? nestedItems : [],
+      nextUrl: typeof nestedNext === 'string' ? nestedNext : null,
+    };
+  }
+
+  return {
+    items: Array.isArray(payload?.items) ? payload.items : [],
+    nextUrl: typeof payload?.next === 'string' ? payload.next : null,
+  };
 }
 
 /** @param {string} url */
