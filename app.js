@@ -22,6 +22,9 @@ const SCOPES = [
   // control playback + read active playback context
   'user-modify-playback-state',
   'user-read-playback-state',
+  // read playlist metadata/tracks for importing albums
+  'playlist-read-private',
+  'playlist-read-collaborative',
 ];
 
 const STORAGE_KEYS = {
@@ -29,6 +32,7 @@ const STORAGE_KEYS = {
   verifier: 'spotifyShuffler.pkceVerifier',
   token: 'spotifyShuffler.token',
   tokenExpiry: 'spotifyShuffler.tokenExpiry',
+  tokenScope: 'spotifyShuffler.tokenScope',
   items: 'spotifyShuffler.items',
 };
 
@@ -40,6 +44,9 @@ const el = {
   redirectUri: /** @type {HTMLElement} */ (document.getElementById('redirect-uri')),
   addForm: /** @type {HTMLFormElement} */ (document.getElementById('add-form')),
   itemUri: /** @type {HTMLInputElement} */ (document.getElementById('item-uri')),
+  importPlaylistBtn: /** @type {HTMLButtonElement} */ (
+    document.getElementById('import-playlist-btn')
+  ),
   itemList: /** @type {HTMLUListElement} */ (document.getElementById('item-list')),
   startBtn: /** @type {HTMLButtonElement} */ (document.getElementById('start-btn')),
   skipBtn: /** @type {HTMLButtonElement} */ (document.getElementById('skip-btn')),
@@ -119,6 +126,10 @@ function hookEvents() {
     void startShuffleSession();
   });
 
+  el.importPlaylistBtn.addEventListener('click', () => {
+    void importAlbumsFromPlaylist();
+  });
+
   el.skipBtn.addEventListener('click', () => {
     void goToNextItem();
   });
@@ -136,7 +147,19 @@ function refreshAuthStatus() {
   }
   const expiresMs = Number(localStorage.getItem(STORAGE_KEYS.tokenExpiry) ?? 0);
   const minutes = Math.max(0, Math.floor((expiresMs - Date.now()) / 60000));
+  const scopeSet = getGrantedScopes();
+  if (!scopeSet.has('playlist-read-private') || !scopeSet.has('playlist-read-collaborative')) {
+    setAuthStatus(
+      `Connected, but token is missing playlist import scopes. Disconnect and reconnect.`,
+    );
+    return;
+  }
   setAuthStatus(`Connected. Token expires in about ${minutes} minute(s).`);
+}
+
+function getGrantedScopes() {
+  const scopeText = localStorage.getItem(STORAGE_KEYS.tokenScope) ?? '';
+  return new Set(scopeText.split(/\s+/).filter(Boolean));
 }
 
 async function ensureStoredItemTitles() {
@@ -198,6 +221,7 @@ async function startLogin() {
     redirect_uri: location.origin + location.pathname,
     code_challenge_method: 'S256',
     code_challenge: challenge,
+    show_dialog: 'true',
   });
 
   location.href = `https://accounts.spotify.com/authorize?${params.toString()}`;
@@ -244,10 +268,11 @@ async function handleAuthRedirect() {
     return;
   }
 
-  /** @type {{access_token: string; expires_in: number}} */
+  /** @type {{access_token: string; expires_in: number; scope?: string}} */
   const data = await response.json();
   localStorage.setItem(STORAGE_KEYS.token, data.access_token);
   localStorage.setItem(STORAGE_KEYS.tokenExpiry, String(Date.now() + data.expires_in * 1000));
+  localStorage.setItem(STORAGE_KEYS.tokenScope, data.scope ?? '');
   localStorage.removeItem(STORAGE_KEYS.verifier);
 
   url.searchParams.delete('code');
@@ -257,6 +282,7 @@ async function handleAuthRedirect() {
 function clearAuth() {
   localStorage.removeItem(STORAGE_KEYS.token);
   localStorage.removeItem(STORAGE_KEYS.tokenExpiry);
+  localStorage.removeItem(STORAGE_KEYS.tokenScope);
   localStorage.removeItem(STORAGE_KEYS.verifier);
 }
 
@@ -410,6 +436,101 @@ async function playCurrentItem() {
   );
 }
 
+async function importAlbumsFromPlaylist() {
+  const token = getToken();
+  if (!token) {
+    setPlaybackStatus('Connect Spotify first so the app can import albums.');
+    return;
+  }
+
+  const parsedPlaylist = parseSpotifyPlaylistRef(el.itemUri.value.trim());
+  if (!parsedPlaylist) {
+    setPlaybackStatus('Enter a valid Spotify playlist URL, URI, or playlist ID.');
+    return;
+  }
+
+  setPlaybackStatus('Importing albums from playlist...');
+
+  const existingItems = getItems();
+  const existingUris = new Set(existingItems.map((item) => item.uri));
+  const importResult = await fetchPlaylistAlbums(parsedPlaylist.id, token);
+  if (importResult.errorMessage) {
+    setPlaybackStatus(importResult.errorMessage);
+    return;
+  }
+  const albumsFromPlaylist = importResult.albums;
+
+  let added = 0;
+  for (const album of albumsFromPlaylist) {
+    if (existingUris.has(album.uri)) continue;
+    existingItems.push(album);
+    existingUris.add(album.uri);
+    added += 1;
+  }
+
+  saveItems(existingItems);
+  renderItemList();
+  setPlaybackStatus(
+    `Imported ${added} album(s) from playlist (${albumsFromPlaylist.length} unique album(s) found).`,
+  );
+}
+
+/**
+ * @param {string} playlistId
+ * @param {string} token
+ * @returns {Promise<{albums: ShuffleItem[]; errorMessage: string | null}>}
+ */
+async function fetchPlaylistAlbums(playlistId, token) {
+  /** @type {Map<string, ShuffleItem>} */
+  const albumsByUri = new Map();
+  let offset = 0;
+  const limit = 50;
+
+  while (true) {
+    const params = new URLSearchParams({
+      limit: String(limit),
+      offset: String(offset),
+      additional_types: 'track',
+      market: 'from_token',
+    });
+    const response = await spotifyApi(
+      `/playlists/${playlistId}/items?${params.toString()}`,
+      { method: 'GET' },
+      token,
+      false,
+    );
+    if (!response.ok) {
+      const details = await response.text();
+      return {
+        albums: [],
+        errorMessage: `Unable to import albums from that playlist (${response.status}). ${details || 'Please try again.'}`,
+      };
+    }
+
+    /** @type {{items?: Array<{item?: {album?: {uri?: string; id?: string; name?: string} | null} | null}>; next?: string | null}} */
+    const data = await response.json();
+    const items = data.items ?? [];
+    for (const entry of items) {
+      const album = entry?.item?.album;
+      const albumUri = album?.uri ?? (album?.id ? `spotify:album:${album.id}` : '');
+      const albumName = (album?.name ?? '').trim();
+      if (!albumUri) continue;
+      if (!albumsByUri.has(albumUri)) {
+        albumsByUri.set(albumUri, {
+          uri: albumUri,
+          type: 'album',
+          title: albumName || albumUri,
+        });
+      }
+    }
+
+    if (!data.next) break;
+    offset += limit;
+  }
+
+  return { albums: [...albumsByUri.values()], errorMessage: null };
+}
+
 /**
  * @param {{uri: string; type: ItemType; title?: string}} item
  * @param {string} token
@@ -521,6 +642,27 @@ function parseSpotifyUri(raw) {
     }
   } catch {
     // not a URL
+  }
+
+  return null;
+}
+
+/**
+ * @param {string} raw
+ * @returns {{id: string; uri: string} | null}
+ */
+function parseSpotifyPlaylistRef(raw) {
+  if (!raw) return null;
+
+  const uriItem = parseSpotifyUri(raw);
+  if (uriItem?.type === 'playlist') {
+    const id = spotifyIdFromUri(uriItem.uri);
+    if (!id) return null;
+    return { id, uri: uriItem.uri };
+  }
+
+  if (/^[a-zA-Z0-9]+$/.test(raw)) {
+    return { id: raw, uri: `spotify:playlist:${raw}` };
   }
 
   return null;
