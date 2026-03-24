@@ -501,23 +501,18 @@ async function fetchPlaylistAlbums(playlistId, token) {
     );
     if (!response.ok) {
       const details = await response.text();
-      if (response.status === 403) {
-        // Some public playlists return 403 on /items for user tokens.
-        // Fallback to /playlists/{id} payload shape.
-        return fetchPlaylistAlbumsFromPlaylistObject(playlistId, token, details);
-      }
       return {
         albums: [],
         errorMessage: `Unable to import albums from that playlist (${response.status}). ${details || 'Please try again.'}`,
       };
     }
 
-    /** @type {{items?: unknown; next?: string | null}} */
+    /** @type {{items?: Array<{item?: {album?: {uri?: string; id?: string; name?: string} | null} | null}>; next?: string | null}} */
     const data = await response.json();
-    const tracks = Array.isArray(data.items) ? data.items : [];
-    for (const item of tracks) {
-      const album = extractAlbumFromPlaylistItem(item);
-      const albumUri = album?.uri ?? '';
+    const items = data.items ?? [];
+    for (const entry of items) {
+      const album = entry?.item?.album;
+      const albumUri = album?.uri ?? (album?.id ? `spotify:album:${album.id}` : '');
       const albumName = (album?.name ?? '').trim();
       if (!albumUri) continue;
       if (!albumsByUri.has(albumUri)) {
@@ -534,140 +529,6 @@ async function fetchPlaylistAlbums(playlistId, token) {
   }
 
   return { albums: [...albumsByUri.values()], errorMessage: null };
-}
-
-/**
- * @param {string} playlistId
- * @param {string} token
- * @param {string} original403Details
- * @returns {Promise<{albums: ShuffleItem[]; errorMessage: string | null}>}
- */
-async function fetchPlaylistAlbumsFromPlaylistObject(playlistId, token, original403Details) {
-  /** @type {Map<string, ShuffleItem>} */
-  const albumsByUri = new Map();
-  const firstParams = new URLSearchParams({ market: 'from_token', limit: '50' });
-  let nextPath = `/playlists/${playlistId}?${firstParams.toString()}`;
-
-  while (nextPath) {
-    const response = await spotifyApi(nextPath, { method: 'GET' }, token, false);
-    if (!response.ok) {
-      const details = await response.text();
-      return {
-        albums: [],
-        errorMessage:
-          `Spotify denied playlist access (403). ${original403Details || details || ''} ` +
-          `Fallback endpoint also failed (${response.status}).`,
-      };
-    }
-
-    /** @type {{tracks?: {items?: unknown; next?: string | null} | unknown; items?: unknown; next?: string | null}} */
-    const data = await response.json();
-    const { items: tracks, nextUrl } = extractPlaylistTrackItemsAndNext(data);
-    for (const item of tracks) {
-      const album = extractAlbumFromPlaylistItem(item);
-      const albumUri = album?.uri ?? '';
-      const albumName = (album?.name ?? '').trim();
-      if (!albumUri) continue;
-      if (!albumsByUri.has(albumUri)) {
-        albumsByUri.set(albumUri, { uri: albumUri, type: 'album', title: albumName || albumUri });
-      }
-    }
-
-    nextPath = nextUrl ? spotifyApiPathFromAbsoluteUrl(nextUrl) : null;
-    if (nextUrl && !nextPath) {
-      return {
-        albums: [],
-        errorMessage: 'Spotify returned an unexpected pagination URL format during playlist import.',
-      };
-    }
-  }
-
-  return { albums: [...albumsByUri.values()], errorMessage: null };
-}
-
-/**
- * @param {{tracks?: {items?: unknown; next?: string | null} | unknown; items?: unknown; next?: string | null}} payload
- * @returns {{items: Array<{track?: {album?: {uri?: string; name?: string} | null} | null}>; nextUrl: string | null}}
- */
-function extractPlaylistTrackItemsAndNext(payload) {
-  if (payload?.tracks && typeof payload.tracks === 'object' && !Array.isArray(payload.tracks)) {
-    const nestedItems = /** @type {{items?: unknown; next?: string | null}} */ (payload.tracks).items;
-    const nestedNext = /** @type {{items?: unknown; next?: string | null}} */ (payload.tracks).next;
-    return {
-      items: Array.isArray(nestedItems) ? nestedItems : [],
-      nextUrl: typeof nestedNext === 'string' ? nestedNext : null,
-    };
-  }
-
-  return {
-    items: Array.isArray(payload?.items) ? payload.items : [],
-    nextUrl: typeof payload?.next === 'string' ? payload.next : null,
-  };
-}
-
-/**
- * @param {unknown} item
- * @returns {{uri: string; name: string} | null}
- */
-function extractAlbumFromPlaylistItem(item) {
-  if (!item || typeof item !== 'object') return null;
-
-  const candidate =
-    /** @type {{track?: {album?: {uri?: string; id?: string; name?: string} | null} | null; album?: {uri?: string; id?: string; name?: string} | null; item?: {album?: {uri?: string; id?: string; name?: string} | null; track?: {album?: {uri?: string; id?: string; name?: string} | null} | null} | null}} */ (
-      item
-    );
-  const album =
-    candidate.track?.album ??
-    candidate.album ??
-    candidate.item?.album ??
-    candidate.item?.track?.album ??
-    null;
-  if (!album) return null;
-
-  const uriFromAlbum = typeof album.uri === 'string' ? album.uri.trim() : '';
-  const idFromAlbum = typeof album.id === 'string' ? album.id.trim() : '';
-  const uriFromUrl = extractSpotifyAlbumUriFromUrl(
-    /** @type {{external_urls?: {spotify?: string}}} */ (album).external_urls?.spotify,
-  );
-  const uri = normalizeAlbumUri(uriFromAlbum) || (idFromAlbum ? `spotify:album:${idFromAlbum}` : '') || uriFromUrl;
-  const name = typeof album.name === 'string' ? album.name : '';
-  if (!uri) return null;
-  return { uri, name };
-}
-
-/** @param {string} raw */
-function normalizeAlbumUri(raw) {
-  if (!raw) return '';
-  if (/^spotify:album:[a-zA-Z0-9]+$/.test(raw)) return raw;
-  return extractSpotifyAlbumUriFromUrl(raw) ?? '';
-}
-
-/** @param {string | undefined} url */
-function extractSpotifyAlbumUriFromUrl(url) {
-  if (!url) return null;
-  try {
-    const parsed = new URL(url);
-    if (!parsed.hostname.includes('spotify.com')) return null;
-    const segments = parsed.pathname.split('/').filter(Boolean);
-    if (segments[0] !== 'album') return null;
-    const albumId = segments[1] ?? '';
-    if (!/^[a-zA-Z0-9]+$/.test(albumId)) return null;
-    return `spotify:album:${albumId}`;
-  } catch {
-    return null;
-  }
-}
-
-/** @param {string} url */
-function spotifyApiPathFromAbsoluteUrl(url) {
-  try {
-    const parsed = new URL(url);
-    if (parsed.origin !== 'https://api.spotify.com') return null;
-    if (!parsed.pathname.startsWith('/v1/')) return null;
-    return parsed.pathname.slice('/v1'.length) + parsed.search;
-  } catch {
-    return null;
-  }
 }
 
 /**
