@@ -86,9 +86,19 @@ async function bootstrap() {
   hookEvents();
   restoreRuntimeState();
   await handleAuthRedirect();
+  await ensureValidAccessToken();
   renderItemList();
   refreshAuthStatus();
   await ensureStoredItemTitles();
+}
+
+async function ensureValidAccessToken() {
+  if (getToken()) return;
+
+  const hasRefreshToken = Boolean(localStorage.getItem(STORAGE_KEYS.refreshToken));
+  if (!hasRefreshToken) return;
+
+  await refreshSpotifyAccessToken();
 }
 
 function hookEvents() {
