@@ -613,10 +613,15 @@ function extractAlbumFromPlaylistItem(item) {
   if (!item || typeof item !== 'object') return null;
 
   const candidate =
-    /** @type {{track?: {album?: {uri?: string; id?: string; name?: string} | null} | null; album?: {uri?: string; id?: string; name?: string} | null}} */ (
+    /** @type {{track?: {album?: {uri?: string; id?: string; name?: string} | null} | null; album?: {uri?: string; id?: string; name?: string} | null; item?: {album?: {uri?: string; id?: string; name?: string} | null; track?: {album?: {uri?: string; id?: string; name?: string} | null} | null} | null}} */ (
       item
     );
-  const album = candidate.track?.album ?? candidate.album ?? null;
+  const album =
+    candidate.track?.album ??
+    candidate.album ??
+    candidate.item?.album ??
+    candidate.item?.track?.album ??
+    null;
   if (!album) return null;
 
   const uriFromAlbum = typeof album.uri === 'string' ? album.uri.trim() : '';
