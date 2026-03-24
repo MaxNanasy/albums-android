@@ -54,6 +54,7 @@ const el = {
   skipBtn: /** @type {HTMLButtonElement} */ (document.getElementById('skip-btn')),
   stopBtn: /** @type {HTMLButtonElement} */ (document.getElementById('stop-btn')),
   playbackStatus: /** @type {HTMLParagraphElement} */ (document.getElementById('playback-status')),
+  queueList: /** @type {HTMLUListElement} */ (document.getElementById('queue-list')),
   exportStorageBtn: /** @type {HTMLButtonElement} */ (
     document.getElementById('export-storage-btn')
   ),
@@ -88,6 +89,7 @@ async function bootstrap() {
   await handleAuthRedirect();
   await ensureValidAccessToken();
   renderItemList();
+  renderSessionQueue();
   refreshAuthStatus();
   await ensureStoredItemTitles();
 }
@@ -482,6 +484,7 @@ async function startShuffleSession() {
   session.active = true;
   session.index = 0;
   persistRuntimeState();
+  renderSessionQueue();
 
   setPlaybackStatus(`Session started with ${session.queue.length} item(s).`);
   await playCurrentItem();
@@ -500,6 +503,7 @@ function stopSession(message) {
     clearInterval(monitorTimer);
     monitorTimer = null;
   }
+  renderSessionQueue();
   setPlaybackStatus(message);
 }
 
@@ -515,6 +519,7 @@ async function goToNextItem() {
     stopSession('Finished: all selected albums/playlists were played.');
     return;
   }
+  renderSessionQueue();
 
   await playCurrentItem();
 }
@@ -768,6 +773,7 @@ function restoreRuntimeState() {
 
   const current = session.queue[session.index];
   setPlaybackStatus(formatNowPlayingStatus(current));
+  renderSessionQueue();
   startMonitorLoop();
 }
 
@@ -786,6 +792,22 @@ function persistRuntimeState() {
 
 function clearRuntimeState() {
   localStorage.removeItem(STORAGE_KEYS.runtime);
+}
+
+function renderSessionQueue() {
+  el.queueList.innerHTML = '';
+  if (!session.active || session.queue.length === 0) return;
+
+  for (let i = 0; i < session.queue.length; i += 1) {
+    const item = session.queue[i];
+    const li = document.createElement('li');
+    if (i === session.index) {
+      li.classList.add('current');
+    }
+    const marker = i === session.index ? '▶' : '•';
+    li.textContent = `${marker} ${i + 1}. ${item.title} (${item.type})`;
+    el.queueList.appendChild(li);
+  }
 }
 
 /**
