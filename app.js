@@ -52,6 +52,13 @@ const el = {
   skipBtn: /** @type {HTMLButtonElement} */ (document.getElementById('skip-btn')),
   stopBtn: /** @type {HTMLButtonElement} */ (document.getElementById('stop-btn')),
   playbackStatus: /** @type {HTMLParagraphElement} */ (document.getElementById('playback-status')),
+  exportStorageBtn: /** @type {HTMLButtonElement} */ (
+    document.getElementById('export-storage-btn')
+  ),
+  importStorageBtn: /** @type {HTMLButtonElement} */ (
+    document.getElementById('import-storage-btn')
+  ),
+  storageJson: /** @type {HTMLTextAreaElement} */ (document.getElementById('storage-json')),
 };
 
 /** @type {SessionState} */
@@ -136,6 +143,14 @@ function hookEvents() {
 
   el.stopBtn.addEventListener('click', () => {
     stopSession('Session stopped.');
+  });
+
+  el.exportStorageBtn.addEventListener('click', () => {
+    exportLocalStorageJson();
+  });
+
+  el.importStorageBtn.addEventListener('click', () => {
+    importLocalStorageJson();
   });
 }
 
@@ -284,6 +299,55 @@ function clearAuth() {
   localStorage.removeItem(STORAGE_KEYS.tokenExpiry);
   localStorage.removeItem(STORAGE_KEYS.tokenScope);
   localStorage.removeItem(STORAGE_KEYS.verifier);
+}
+
+function exportLocalStorageJson() {
+  /** @type {Record<string, string>} */
+  const data = {};
+  for (let index = 0; index < localStorage.length; index += 1) {
+    const key = localStorage.key(index);
+    if (!key) continue;
+    const value = localStorage.getItem(key);
+    data[key] = value ?? '';
+  }
+
+  el.storageJson.value = JSON.stringify(data, null, 2);
+  setPlaybackStatus(`Exported ${Object.keys(data).length} local storage key(s) to JSON.`);
+}
+
+function importLocalStorageJson() {
+  const raw = el.storageJson.value.trim();
+  if (!raw) {
+    setPlaybackStatus('Paste a JSON object to import.');
+    return;
+  }
+
+  /** @type {unknown} */
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    setPlaybackStatus('Invalid JSON. Please provide a valid JSON object.');
+    return;
+  }
+
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    setPlaybackStatus('Import JSON must be an object of key/value pairs.');
+    return;
+  }
+
+  const entries = Object.entries(parsed);
+  localStorage.clear();
+  for (const [key, value] of entries) {
+    if (typeof key !== 'string' || key.length === 0) continue;
+    localStorage.setItem(key, String(value ?? ''));
+  }
+
+  stopSession('Local storage imported. Session reset.');
+  el.clientId.value = localStorage.getItem(STORAGE_KEYS.clientId) ?? '';
+  renderItemList();
+  refreshAuthStatus();
+  setPlaybackStatus(`Imported ${entries.length} local storage key(s).`);
 }
 
 function getToken() {
