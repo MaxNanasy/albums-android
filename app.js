@@ -494,7 +494,7 @@ async function fetchPlaylistAlbums(playlistId, token) {
         'items(track(album(uri,name))),next',
     });
     const response = await spotifyApi(
-      `/playlists/${playlistId}/tracks?${params.toString()}`,
+      `/playlists/${playlistId}/items?${params.toString()}`,
       { method: 'GET' },
       token,
       false,
@@ -502,7 +502,7 @@ async function fetchPlaylistAlbums(playlistId, token) {
     if (!response.ok) {
       const details = await response.text();
       if (response.status === 403) {
-        // Some public playlists return 403 on /tracks for user tokens.
+        // Some public playlists return 403 on /items for user tokens.
         // Fallback to /playlists/{id} payload shape.
         return fetchPlaylistAlbumsFromPlaylistObject(playlistId, token, details);
       }
