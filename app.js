@@ -31,6 +31,7 @@ const STORAGE_KEYS = {
   clientId: 'spotifyShuffler.clientId',
   verifier: 'spotifyShuffler.pkceVerifier',
   token: 'spotifyShuffler.token',
+  refreshToken: 'spotifyShuffler.refreshToken',
   tokenExpiry: 'spotifyShuffler.tokenExpiry',
   tokenScope: 'spotifyShuffler.tokenScope',
   items: 'spotifyShuffler.items',
@@ -283,9 +284,12 @@ async function handleAuthRedirect() {
     return;
   }
 
-  /** @type {{access_token: string; expires_in: number; scope?: string}} */
+  /** @type {{access_token: string; refresh_token?: string; expires_in: number; scope?: string}} */
   const data = await response.json();
   localStorage.setItem(STORAGE_KEYS.token, data.access_token);
+  if (data.refresh_token) {
+    localStorage.setItem(STORAGE_KEYS.refreshToken, data.refresh_token);
+  }
   localStorage.setItem(STORAGE_KEYS.tokenExpiry, String(Date.now() + data.expires_in * 1000));
   localStorage.setItem(STORAGE_KEYS.tokenScope, data.scope ?? '');
   localStorage.removeItem(STORAGE_KEYS.verifier);
@@ -296,9 +300,41 @@ async function handleAuthRedirect() {
 
 function clearAuth() {
   localStorage.removeItem(STORAGE_KEYS.token);
+  localStorage.removeItem(STORAGE_KEYS.refreshToken);
   localStorage.removeItem(STORAGE_KEYS.tokenExpiry);
   localStorage.removeItem(STORAGE_KEYS.tokenScope);
   localStorage.removeItem(STORAGE_KEYS.verifier);
+}
+
+async function refreshSpotifyAccessToken() {
+  const clientId = localStorage.getItem(STORAGE_KEYS.clientId);
+  const refreshToken = localStorage.getItem(STORAGE_KEYS.refreshToken);
+  if (!clientId || !refreshToken) return null;
+
+  const formData = new URLSearchParams({
+    grant_type: 'refresh_token',
+    refresh_token: refreshToken,
+    client_id: clientId,
+  });
+
+  const response = await fetch('https://accounts.spotify.com/api/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: formData,
+  });
+  if (!response.ok) return null;
+
+  /** @type {{access_token: string; refresh_token?: string; expires_in: number; scope?: string}} */
+  const data = await response.json();
+  localStorage.setItem(STORAGE_KEYS.token, data.access_token);
+  localStorage.setItem(STORAGE_KEYS.tokenExpiry, String(Date.now() + data.expires_in * 1000));
+  if (typeof data.scope === 'string') {
+    localStorage.setItem(STORAGE_KEYS.tokenScope, data.scope);
+  }
+  if (data.refresh_token) {
+    localStorage.setItem(STORAGE_KEYS.refreshToken, data.refresh_token);
+  }
+  return data.access_token;
 }
 
 function exportLocalStorageJson() {
@@ -665,14 +701,30 @@ async function monitorPlayback() {
  * @param {boolean} throwOnError
  */
 async function spotifyApi(path, init, token, throwOnError = true) {
-  const response = await fetch(`https://api.spotify.com/v1${path}`, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      ...(init.headers ?? {}),
-    },
-  });
+  /** @param {string} bearerToken */
+  const makeRequest = (bearerToken) =>
+    fetch(`https://api.spotify.com/v1${path}`, {
+      ...init,
+      headers: {
+        Authorization: `Bearer ${bearerToken}`,
+        'Content-Type': 'application/json',
+        ...(init.headers ?? {}),
+      },
+    });
+
+  let response = await makeRequest(token);
+  if (response.status === 401) {
+    const refreshedToken = await refreshSpotifyAccessToken();
+    if (refreshedToken) {
+      response = await makeRequest(refreshedToken);
+    }
+
+    if (response.status === 401) {
+      clearAuth();
+      stopSession('Spotify session expired. Please reconnect.');
+      setAuthStatus('Spotify session expired. Please reconnect.');
+    }
+  }
 
   if (!response.ok && throwOnError) {
     const body = await response.text();
