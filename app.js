@@ -35,6 +35,7 @@ const STORAGE_KEYS = {
   tokenExpiry: 'spotifyShuffler.tokenExpiry',
   tokenScope: 'spotifyShuffler.tokenScope',
   items: 'spotifyShuffler.items',
+  runtime: 'spotifyShuffler.runtime',
 };
 
 const el = {
@@ -83,6 +84,7 @@ async function bootstrap() {
   el.clientId.value = localStorage.getItem(STORAGE_KEYS.clientId) ?? '';
 
   hookEvents();
+  restoreRuntimeState();
   await handleAuthRedirect();
   renderItemList();
   refreshAuthStatus();
@@ -469,6 +471,7 @@ async function startShuffleSession() {
   session.queue = shuffledCopy(items);
   session.active = true;
   session.index = 0;
+  persistRuntimeState();
 
   setPlaybackStatus(`Session started with ${session.queue.length} item(s).`);
   await playCurrentItem();
@@ -482,6 +485,7 @@ function stopSession(message) {
   session.index = 0;
   session.currentUri = null;
   session.observedCurrentContext = false;
+  clearRuntimeState();
   if (monitorTimer !== null) {
     clearInterval(monitorTimer);
     monitorTimer = null;
@@ -496,6 +500,7 @@ async function goToNextItem() {
   }
 
   session.index += 1;
+  persistRuntimeState();
   if (session.index >= session.queue.length) {
     stopSession('Finished: all selected albums/playlists were played.');
     return;
@@ -508,6 +513,7 @@ async function playCurrentItem() {
   const current = session.queue[session.index];
   session.currentUri = current.uri;
   session.observedCurrentContext = false;
+  persistRuntimeState();
 
   const token = getToken();
   if (!token) {
@@ -531,9 +537,7 @@ async function playCurrentItem() {
     token,
   );
 
-  setPlaybackStatus(
-    `Now playing ${current.type} ${session.index + 1} of ${session.queue.length}: ${current.title}`,
-  );
+  setPlaybackStatus(formatNowPlayingStatus(current));
 }
 
 async function importAlbumsFromPlaylist() {
@@ -685,6 +689,7 @@ async function monitorPlayback() {
 
   if (contextUri === session.currentUri) {
     session.observedCurrentContext = true;
+    persistRuntimeState();
     return;
   }
 
@@ -692,6 +697,93 @@ async function monitorPlayback() {
     // Current context moved away (likely finished, or user manually changed it).
     await goToNextItem();
   }
+}
+
+function restoreRuntimeState() {
+  const raw = localStorage.getItem(STORAGE_KEYS.runtime);
+  if (!raw) return;
+
+  /** @type {unknown} */
+  let parsedUnknown;
+  try {
+    parsedUnknown = JSON.parse(raw);
+  } catch {
+    localStorage.removeItem(STORAGE_KEYS.runtime);
+    return;
+  }
+
+  if (!parsedUnknown || typeof parsedUnknown !== 'object' || Array.isArray(parsedUnknown)) {
+    localStorage.removeItem(STORAGE_KEYS.runtime);
+    return;
+  }
+  /** @type {Record<string, unknown>} */
+  const parsed = /** @type {Record<string, unknown>} */ (parsedUnknown);
+
+  const queueValue = parsed.queue;
+  const restoredQueue = Array.isArray(queueValue)
+    ? queueValue.filter(
+        /** @param {unknown} item */
+        (item) => {
+          if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
+          /** @type {Record<string, unknown>} */
+          const runtimeItem = /** @type {Record<string, unknown>} */ (item);
+          return (
+            (runtimeItem.type === 'album' || runtimeItem.type === 'playlist') &&
+            typeof runtimeItem.uri === 'string' &&
+            typeof runtimeItem.title === 'string'
+          );
+        },
+      )
+    : [];
+
+  const indexValue = parsed.index;
+  const restoredIndex =
+    typeof indexValue === 'number' && Number.isInteger(indexValue) && indexValue >= 0
+      ? indexValue
+      : 0;
+  const restoredCurrentUri = typeof parsed.currentUri === 'string' ? parsed.currentUri : null;
+  const restoredObserved = parsed.observedCurrentContext === true;
+  const restoredActive = parsed.active === true && restoredQueue.length > 0;
+
+  session.queue = restoredQueue;
+  session.index = Math.min(restoredIndex, Math.max(0, restoredQueue.length - 1));
+  session.currentUri = restoredCurrentUri;
+  session.observedCurrentContext = restoredObserved;
+  session.active = restoredActive;
+
+  if (!session.active) {
+    clearRuntimeState();
+    return;
+  }
+
+  const current = session.queue[session.index];
+  setPlaybackStatus(formatNowPlayingStatus(current));
+  startMonitorLoop();
+}
+
+function persistRuntimeState() {
+  localStorage.setItem(
+    STORAGE_KEYS.runtime,
+    JSON.stringify({
+      active: session.active,
+      queue: session.queue,
+      index: session.index,
+      currentUri: session.currentUri,
+      observedCurrentContext: session.observedCurrentContext,
+    }),
+  );
+}
+
+function clearRuntimeState() {
+  localStorage.removeItem(STORAGE_KEYS.runtime);
+}
+
+/**
+ * @param {ShuffleItem} item
+ * @returns {string}
+ */
+function formatNowPlayingStatus(item) {
+  return `Now playing ${item.type} ${session.index + 1} of ${session.queue.length}: ${item.title}`;
 }
 
 /**
