@@ -62,6 +62,7 @@ const el = {
     document.getElementById('import-storage-btn')
   ),
   storageJson: /** @type {HTMLTextAreaElement} */ (document.getElementById('storage-json')),
+  toastStack: /** @type {HTMLDivElement} */ (document.getElementById('toast-stack')),
 };
 
 /** @type {SessionState} */
@@ -74,6 +75,7 @@ const session = {
 };
 
 let monitorTimer = /** @type {number | null} */ (null);
+const TOAST_DURATION_MS = 5000;
 
 bootstrap().catch((error) => {
   console.error(error);
@@ -106,30 +108,30 @@ function hookEvents() {
   el.logoutBtn.addEventListener('click', () => {
     clearAuth();
     refreshAuthStatus();
-    setPlaybackStatus('Disconnected from Spotify.');
+    showToast('Disconnected from Spotify.', 'info');
   });
 
   el.addForm.addEventListener('submit', async (event) => {
     event.preventDefault();
     const parsed = parseSpotifyUri(el.itemUri.value.trim());
     if (!parsed) {
-      setPlaybackStatus('Enter a valid Spotify album/playlist URI or URL.');
+      showToast('Enter a valid Spotify album/playlist URI or URL.', 'error');
       return;
     }
     const items = getItems();
     if (items.some((item) => item.uri === parsed.uri)) {
-      setPlaybackStatus('Item is already in your list.');
+      showToast('Item is already in your list.', 'info');
       return;
     }
     const token = await getUsableAccessToken();
     if (!token) {
-      setPlaybackStatus('Connect Spotify first so the app can load item titles.');
+      showToast('Connect Spotify first so the app can load item titles.', 'error');
       return;
     }
 
     const titledItem = await withItemTitle(parsed, token);
     if (!titledItem) {
-      setPlaybackStatus('Unable to load title for that item. Please try another URI.');
+      showToast('Unable to load title for that item. Please try another URI.', 'error');
       return;
     }
 
@@ -137,6 +139,7 @@ function hookEvents() {
     saveItems(items);
     el.itemUri.value = '';
     renderItemList();
+    showToast('Item added.', 'success');
   });
 
   el.startBtn.addEventListener('click', () => {
@@ -223,6 +226,57 @@ function setAuthStatus(message) {
 /** @param {string} message */
 function setPlaybackStatus(message) {
   el.playbackStatus.textContent = message;
+}
+
+
+/**
+ * @param {string} message
+ * @param {'success' | 'info' | 'error'} [type]
+ */
+function showToast(message, type = 'info') {
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${type}`;
+  toast.role = type === 'error' ? 'alert' : 'status';
+
+  const body = document.createElement('span');
+  body.className = 'toast-message';
+  body.textContent = message;
+
+  const closeButton = document.createElement('button');
+  closeButton.type = 'button';
+  closeButton.className = 'toast-close';
+  closeButton.setAttribute('aria-label', 'Close notification');
+  closeButton.textContent = '×';
+
+  /** @type {number | null} */
+  let timeoutId = window.setTimeout(removeToast, TOAST_DURATION_MS);
+
+  function clearDismissTimer() {
+    if (timeoutId !== null) {
+      window.clearTimeout(timeoutId);
+      timeoutId = null;
+    }
+  }
+
+  function restartDismissTimer() {
+    clearDismissTimer();
+    timeoutId = window.setTimeout(removeToast, TOAST_DURATION_MS);
+  }
+
+  function removeToast() {
+    clearDismissTimer();
+    toast.classList.add('toast-leaving');
+    window.setTimeout(() => {
+      toast.remove();
+    }, 180);
+  }
+
+  closeButton.addEventListener('click', removeToast);
+  toast.addEventListener('mouseenter', clearDismissTimer);
+  toast.addEventListener('mouseleave', restartDismissTimer);
+
+  toast.append(body, closeButton);
+  el.toastStack.appendChild(toast);
 }
 
 async function startLogin() {
@@ -355,13 +409,13 @@ function exportLocalStorageJson() {
   }
 
   el.storageJson.value = JSON.stringify(data, null, 2);
-  setPlaybackStatus(`Exported ${Object.keys(data).length} local storage key(s) to JSON.`);
+  showToast(`Exported ${Object.keys(data).length} local storage key(s) to JSON.`, 'success');
 }
 
 function importLocalStorageJson() {
   const raw = el.storageJson.value.trim();
   if (!raw) {
-    setPlaybackStatus('Paste a JSON object to import.');
+    showToast('Paste a JSON object to import.', 'error');
     return;
   }
 
@@ -370,12 +424,12 @@ function importLocalStorageJson() {
   try {
     parsed = JSON.parse(raw);
   } catch {
-    setPlaybackStatus('Invalid JSON. Please provide a valid JSON object.');
+    showToast('Invalid JSON. Please provide a valid JSON object.', 'error');
     return;
   }
 
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    setPlaybackStatus('Import JSON must be an object of key/value pairs.');
+    showToast('Import JSON must be an object of key/value pairs.', 'error');
     return;
   }
 
@@ -390,7 +444,7 @@ function importLocalStorageJson() {
   el.clientId.value = localStorage.getItem(STORAGE_KEYS.clientId) ?? '';
   renderItemList();
   refreshAuthStatus();
-  setPlaybackStatus(`Imported ${entries.length} local storage key(s).`);
+  showToast(`Imported ${entries.length} local storage key(s).`, 'success');
 }
 
 function getToken() {
@@ -473,13 +527,13 @@ function renderItemList() {
 async function startShuffleSession() {
   const token = await getUsableAccessToken();
   if (!token) {
-    setPlaybackStatus('Connect Spotify first.');
+    showToast('Connect Spotify first.', 'error');
     return;
   }
 
   const items = getItems();
   if (items.length === 0) {
-    setPlaybackStatus('Add at least one album or playlist first.');
+    showToast('Add at least one album or playlist first.', 'info');
     return;
   }
 
@@ -561,23 +615,23 @@ async function playCurrentItem() {
 async function importAlbumsFromPlaylist() {
   const token = await getUsableAccessToken();
   if (!token) {
-    setPlaybackStatus('Connect Spotify first so the app can import albums.');
+    showToast('Connect Spotify first so the app can import albums.', 'error');
     return;
   }
 
   const parsedPlaylist = parseSpotifyPlaylistRef(el.itemUri.value.trim());
   if (!parsedPlaylist) {
-    setPlaybackStatus('Enter a valid Spotify playlist URL, URI, or playlist ID.');
+    showToast('Enter a valid Spotify playlist URL, URI, or playlist ID.', 'error');
     return;
   }
 
-  setPlaybackStatus('Importing albums from playlist...');
+  showToast('Importing albums from playlist...', 'info');
 
   const existingItems = getItems();
   const existingUris = new Set(existingItems.map((item) => item.uri));
   const importResult = await fetchPlaylistAlbums(parsedPlaylist.id, token);
   if (importResult.errorMessage) {
-    setPlaybackStatus(importResult.errorMessage);
+    showToast(importResult.errorMessage, 'error');
     return;
   }
   const albumsFromPlaylist = importResult.albums;
@@ -592,8 +646,9 @@ async function importAlbumsFromPlaylist() {
 
   saveItems(existingItems);
   renderItemList();
-  setPlaybackStatus(
+  showToast(
     `Imported ${added} album(s) from playlist (${albumsFromPlaylist.length} unique album(s) found).`,
+    'success',
   );
 }
 

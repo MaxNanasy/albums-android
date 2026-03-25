@@ -115,3 +115,76 @@ li {
 code {
   user-select: all;
 }
+
+#toast-stack {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 1000;
+  display: grid;
+  gap: 0.6rem;
+  width: min(24rem, calc(100vw - 2rem));
+  pointer-events: none;
+}
+
+.toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 0.6rem;
+  border: 1px solid;
+  background: color-mix(in oklab, canvas 88%, canvasText 12%);
+  box-shadow: 0 10px 20px color-mix(in oklab, canvasText 18%, transparent);
+  animation: toast-enter 0.2s ease-out;
+}
+
+.toast-message {
+  line-height: 1.3;
+}
+
+.toast-close {
+  line-height: 1;
+  min-width: 1.8rem;
+  padding: 0.15rem 0.45rem;
+}
+
+.toast-info {
+  border-color: #3a76c5;
+}
+
+.toast-success {
+  border-color: #2e9f67;
+}
+
+.toast-error {
+  border-color: #bf3d3d;
+}
+
+.toast-leaving {
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+@keyframes toast-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 640px) {
+  #toast-stack {
+    left: 0.75rem;
+    right: 0.75rem;
+    bottom: 0.75rem;
+    width: auto;
+  }
+}
