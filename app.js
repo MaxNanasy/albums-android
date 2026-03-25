@@ -850,6 +850,7 @@ async function monitorPlayback() {
     reportError(new Error(`Playback monitor request failed (${response.status}): ${details}`), {
       context: 'monitor',
       fallbackMessage: 'Could not check playback state.',
+      statusCode: response.status,
       playbackStatusMessage: 'Unable to check playback state right now.',
       toastMode: 'cooldown',
       toastKey: `monitor-http-${response.status}`,
@@ -1023,7 +1024,7 @@ async function spotifyApi(path, init, token, throwOnError = true) {
 
   if (!response.ok && throwOnError) {
     const body = await response.text();
-    throw new Error(`Spotify API ${path} failed (${response.status}): ${body}`);
+    throw createStatusError(`Spotify API ${path} failed (${response.status}): ${body}`, response.status);
   }
   return response;
 }
@@ -1033,6 +1034,7 @@ async function spotifyApi(path, init, token, throwOnError = true) {
  * @param {{
  *   context: string;
  *   fallbackMessage: string;
+ *   statusCode?: number;
  *   authStatusMessage?: string;
  *   playbackStatusMessage?: string;
  *   toastMode?: 'always' | 'cooldown';
@@ -1040,7 +1042,7 @@ async function spotifyApi(path, init, token, throwOnError = true) {
  * }} options
  */
 function reportError(error, options) {
-  const message = errorMessageForUser(error, options.fallbackMessage);
+  const message = errorMessageForUser(error, options.fallbackMessage, options.statusCode);
   console.error(`[${options.context}]`, error);
   if (options.authStatusMessage) {
     setAuthStatus(options.authStatusMessage);
@@ -1065,29 +1067,63 @@ function reportError(error, options) {
 /**
  * @param {unknown} error
  * @param {string} fallbackMessage
+ * @param {number | undefined} statusCode
  */
-function errorMessageForUser(error, fallbackMessage) {
-  const raw = error instanceof Error ? error.message : String(error ?? '');
-  if (!raw) return fallbackMessage;
-  if (/Failed to fetch/i.test(raw) || /NetworkError/i.test(raw)) {
-    return 'Network error while contacting Spotify. Please try again.';
-  }
-  if (/\(401\)/.test(raw)) {
+function errorMessageForUser(error, fallbackMessage, statusCode) {
+  const resolvedStatusCode = resolveStatusCode(error, statusCode);
+  if (resolvedStatusCode === 401) {
     return 'Spotify session expired. Please reconnect.';
   }
-  if (/\(403\)/.test(raw)) {
+  if (resolvedStatusCode === 403) {
     return 'Spotify permissions are missing. Disconnect and reconnect.';
   }
-  if (/\(404\)/.test(raw)) {
+  if (resolvedStatusCode === 404) {
     return 'Requested Spotify item or playback device was not found.';
   }
-  if (/\(429\)/.test(raw)) {
+  if (resolvedStatusCode === 429) {
     return 'Spotify rate limit reached. Please wait a moment and retry.';
   }
-  if (/\(5\d\d\)/.test(raw)) {
+  if (resolvedStatusCode !== null && resolvedStatusCode >= 500) {
     return 'Spotify is temporarily unavailable. Please try again shortly.';
   }
+
+  const raw = error instanceof Error ? error.message : String(error ?? '');
+  if (raw && (/Failed to fetch/i.test(raw) || /NetworkError/i.test(raw))) {
+    return 'Network error while contacting Spotify. Please try again.';
+  }
   return fallbackMessage;
+}
+
+/**
+ * @param {unknown} error
+ * @param {number | undefined} explicitStatusCode
+ * @returns {number | null}
+ */
+function resolveStatusCode(error, explicitStatusCode) {
+  if (typeof explicitStatusCode === 'number') {
+    return explicitStatusCode;
+  }
+  if (!error || typeof error !== 'object' || Array.isArray(error)) {
+    return null;
+  }
+  const maybeStatus = /** @type {{statusCode?: unknown; status?: unknown}} */ (error);
+  if (typeof maybeStatus.statusCode === 'number') {
+    return maybeStatus.statusCode;
+  }
+  if (typeof maybeStatus.status === 'number') {
+    return maybeStatus.status;
+  }
+  return null;
+}
+
+/**
+ * @param {string} message
+ * @param {number} statusCode
+ */
+function createStatusError(message, statusCode) {
+  const statusError = new Error(message);
+  /** @type {{statusCode: number}} */ (statusError).statusCode = statusCode;
+  return statusError;
 }
 
 /**
