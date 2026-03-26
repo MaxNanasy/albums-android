@@ -575,7 +575,7 @@ function renderItemList() {
   for (const item of items) {
     const li = document.createElement('li');
     const text = document.createElement('span');
-    text.textContent = item.title ? `${item.title} (${item.type})` : `${item.uri} (${item.type})`;
+    text.textContent = item.title ? item.title : item.uri;
 
     const actions = document.createElement('div');
     actions.className = 'row';
@@ -976,7 +976,7 @@ function renderSessionQueue() {
       li.classList.add('current');
     }
     const marker = i === session.index ? '▶' : '•';
-    li.textContent = `${marker} ${i + 1}. ${item.title} (${item.type})`;
+    li.textContent = `${marker} ${i + 1}. ${item.title}`;
     el.queueList.appendChild(li);
   }
 }
