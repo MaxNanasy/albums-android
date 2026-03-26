@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "devDependencies": {
+    "type-coverage": "^2.29.7",
     "typescript": "^6.0.2"
   }
 }
