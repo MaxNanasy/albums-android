@@ -26,9 +26,9 @@ const SCOPES = [
   'playlist-read-private',
   'playlist-read-collaborative',
 ];
+const SPOTIFY_APP_ID = '5082b1452bc24cc3a0955f2d1c4e5560';
 
 const STORAGE_KEYS = {
-  clientId: 'spotifyShuffler.clientId',
   verifier: 'spotifyShuffler.pkceVerifier',
   token: 'spotifyShuffler.token',
   refreshToken: 'spotifyShuffler.refreshToken',
@@ -39,11 +39,9 @@ const STORAGE_KEYS = {
 };
 
 const el = {
-  clientId: /** @type {HTMLInputElement} */ (document.getElementById('client-id')),
   loginBtn: /** @type {HTMLButtonElement} */ (document.getElementById('login-btn')),
   logoutBtn: /** @type {HTMLButtonElement} */ (document.getElementById('logout-btn')),
   authStatus: /** @type {HTMLParagraphElement} */ (document.getElementById('auth-status')),
-  redirectUri: /** @type {HTMLElement} */ (document.getElementById('redirect-uri')),
   addForm: /** @type {HTMLFormElement} */ (document.getElementById('add-form')),
   itemUri: /** @type {HTMLInputElement} */ (document.getElementById('item-uri')),
   importPlaylistBtn: /** @type {HTMLButtonElement} */ (
@@ -96,9 +94,6 @@ bootstrap().catch(
 );
 
 async function bootstrap() {
-  el.redirectUri.textContent = location.origin + location.pathname;
-  el.clientId.value = localStorage.getItem(STORAGE_KEYS.clientId) ?? '';
-
   hookEvents();
   restoreRuntimeState();
   await handleAuthRedirect();
@@ -375,20 +370,13 @@ function showToast(message, type = 'info', options = {}) {
 }
 
 async function startLogin() {
-  const clientId = el.clientId.value.trim();
-  if (!clientId) {
-    setAuthStatus('Please provide your Spotify Client ID.');
-    return;
-  }
-  localStorage.setItem(STORAGE_KEYS.clientId, clientId);
-
   const verifier = randomString(64);
   const challenge = await codeChallengeFromVerifier(verifier);
   localStorage.setItem(STORAGE_KEYS.verifier, verifier);
 
   const params = new URLSearchParams({
     response_type: 'code',
-    client_id: clientId,
+    client_id: SPOTIFY_APP_ID,
     scope: SCOPES.join(' '),
     redirect_uri: location.origin + location.pathname,
     code_challenge_method: 'S256',
@@ -413,11 +401,10 @@ async function handleAuthRedirect() {
 
   if (!code) return;
 
-  const clientId = localStorage.getItem(STORAGE_KEYS.clientId);
   const verifier = localStorage.getItem(STORAGE_KEYS.verifier);
 
-  if (!clientId || !verifier) {
-    setAuthStatus('Missing PKCE verifier/client ID. Try connecting again.');
+  if (!verifier) {
+    setAuthStatus('Missing PKCE verifier. Try connecting again.');
     return;
   }
 
@@ -425,7 +412,7 @@ async function handleAuthRedirect() {
     grant_type: 'authorization_code',
     code,
     redirect_uri: location.origin + location.pathname,
-    client_id: clientId,
+    client_id: SPOTIFY_APP_ID,
     code_verifier: verifier,
   });
 
@@ -463,14 +450,13 @@ function clearAuth() {
 }
 
 async function refreshSpotifyAccessToken() {
-  const clientId = localStorage.getItem(STORAGE_KEYS.clientId);
   const refreshToken = localStorage.getItem(STORAGE_KEYS.refreshToken);
-  if (!clientId || !refreshToken) return null;
+  if (!refreshToken) return null;
 
   const formData = new URLSearchParams({
     grant_type: 'refresh_token',
     refresh_token: refreshToken,
-    client_id: clientId,
+    client_id: SPOTIFY_APP_ID,
   });
 
   /** @type {Response} */
@@ -550,7 +536,6 @@ function importLocalStorageJson() {
   }
 
   stopSession('Local storage imported. Session reset.');
-  el.clientId.value = localStorage.getItem(STORAGE_KEYS.clientId) ?? '';
   renderItemList();
   refreshAuthStatus();
   showToast(`Imported ${entries.length} local storage key(s).`, 'success');

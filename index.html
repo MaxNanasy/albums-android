@@ -16,14 +16,6 @@
 
       <section class="panel">
         <h2>1) Connect Spotify</h2>
-        <label>
-          Spotify Client ID
-          <input id="client-id" placeholder="Your Spotify app client ID" />
-        </label>
-        <p class="small">
-          In your Spotify app settings, add this redirect URI:
-          <code id="redirect-uri"></code>
-        </p>
         <div class="row">
           <button id="login-btn">Connect</button>
           <button id="logout-btn" class="secondary">Disconnect</button>
@@ -75,7 +67,7 @@
           <textarea
             id="storage-json"
             rows="10"
-            placeholder='{"spotifyShuffler.clientId":"...","spotifyShuffler.items":"[...]"}'
+            placeholder='{"spotifyShuffler.items":"[...]"}'
           ></textarea>
         </label>
         <p class="small">

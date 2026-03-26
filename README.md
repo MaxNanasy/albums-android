@@ -19,9 +19,8 @@ Then open `http://localhost:4173`.
 
 ## Spotify app setup
 
-1. In the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard), create an app.
-2. Add your redirect URI (shown in the app UI) to the app settings.
-3. Copy the Client ID into the app.
+No manual Spotify app setup is required for this project. The app ID is fixed to
+`5082b1452bc24cc3a0955f2d1c4e5560`, and the OAuth redirect URI is derived from the current page URL.
 
 ## Requested Spotify scopes (minimal)
 
