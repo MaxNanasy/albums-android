@@ -76,10 +76,18 @@ const session = {
 
 let monitorTimer = /** @type {number | null} */ (null);
 const TOAST_DURATION_MS = 5000;
+const ERROR_TOAST_COOLDOWN_MS = 45000;
+/** @type {Map<string, number>} */
+const errorToastLastShownAt = new Map();
 
 bootstrap().catch((error) => {
-  console.error(error);
-  setAuthStatus(`Startup error: ${error instanceof Error ? error.message : String(error)}`);
+  reportError(error, {
+    context: 'startup',
+    fallbackMessage: 'The app failed to initialize.',
+    authStatusMessage: 'Startup failed. Please refresh and reconnect Spotify.',
+    toastMode: 'cooldown',
+    toastKey: 'startup',
+  });
 });
 
 async function bootstrap() {
@@ -97,12 +105,28 @@ async function bootstrap() {
 }
 
 async function ensureValidAccessToken() {
-  await getUsableAccessToken();
+  try {
+    await getUsableAccessToken();
+  } catch (error) {
+    reportError(error, {
+      context: 'auth',
+      fallbackMessage: 'Unable to validate Spotify session.',
+      authStatusMessage: 'Unable to validate Spotify session. Please reconnect.',
+      toastMode: 'cooldown',
+      toastKey: 'auth-validate',
+    });
+  }
 }
 
 function hookEvents() {
   el.loginBtn.addEventListener('click', () => {
-    void startLogin();
+    void startLogin().catch((error) => {
+      reportError(error, {
+        context: 'auth',
+        fallbackMessage: 'Failed to start Spotify connection.',
+        authStatusMessage: 'Unable to connect right now. Please try again.',
+      });
+    });
   });
 
   el.logoutBtn.addEventListener('click', () => {
@@ -113,45 +137,69 @@ function hookEvents() {
 
   el.addForm.addEventListener('submit', async (event) => {
     event.preventDefault();
-    const parsed = parseSpotifyUri(el.itemUri.value.trim());
-    if (!parsed) {
-      showToast('Enter a valid Spotify album/playlist URI or URL.', 'error');
-      return;
-    }
-    const items = getItems();
-    if (items.some((item) => item.uri === parsed.uri)) {
-      showToast('Item is already in your list.', 'info');
-      return;
-    }
-    const token = await getUsableAccessToken();
-    if (!token) {
-      showToast('Connect Spotify first so the app can load item titles.', 'error');
-      return;
-    }
+    try {
+      const parsed = parseSpotifyUri(el.itemUri.value.trim());
+      if (!parsed) {
+        showToast('Enter a valid Spotify album/playlist URI or URL.', 'error');
+        return;
+      }
+      const items = getItems();
+      if (items.some((item) => item.uri === parsed.uri)) {
+        showToast('Item is already in your list.', 'info');
+        return;
+      }
+      const token = await getUsableAccessToken();
+      if (!token) {
+        showToast('Connect Spotify first so the app can load item titles.', 'error');
+        return;
+      }
 
-    const titledItem = await withItemTitle(parsed, token);
-    if (!titledItem) {
-      showToast('Unable to load title for that item. Please try another URI.', 'error');
-      return;
-    }
+      const titledItem = await withItemTitle(parsed, token);
+      if (!titledItem) {
+        showToast('Unable to load title for that item. Please try another URI.', 'error');
+        return;
+      }
 
-    items.push(titledItem);
-    saveItems(items);
-    el.itemUri.value = '';
-    renderItemList();
-    showToast('Item added.', 'success');
+      items.push(titledItem);
+      saveItems(items);
+      el.itemUri.value = '';
+      renderItemList();
+      showToast('Item added.', 'success');
+    } catch (error) {
+      reportError(error, {
+        context: 'items',
+        fallbackMessage: 'Failed to add this item.',
+      });
+    }
   });
 
   el.startBtn.addEventListener('click', () => {
-    void startShuffleSession();
+    void startShuffleSession().catch((error) => {
+      reportError(error, {
+        context: 'playback',
+        fallbackMessage: 'Failed to start shuffle session.',
+        playbackStatusMessage: 'Unable to start session right now. Please try again.',
+      });
+    });
   });
 
   el.importPlaylistBtn.addEventListener('click', () => {
-    void importAlbumsFromPlaylist();
+    void importAlbumsFromPlaylist().catch((error) => {
+      reportError(error, {
+        context: 'import',
+        fallbackMessage: 'Failed to import albums from playlist.',
+      });
+    });
   });
 
   el.skipBtn.addEventListener('click', () => {
-    void goToNextItem();
+    void goToNextItem().catch((error) => {
+      reportError(error, {
+        context: 'playback',
+        fallbackMessage: 'Failed to skip to the next item.',
+        playbackStatusMessage: 'Unable to skip right now. Please try again.',
+      });
+    });
   });
 
   el.stopBtn.addEventListener('click', () => {
@@ -192,7 +240,18 @@ async function ensureStoredItemTitles() {
   const items = getItems();
   if (items.length === 0) return;
 
-  const token = await getUsableAccessToken();
+  let token = null;
+  try {
+    token = await getUsableAccessToken();
+  } catch (error) {
+    reportError(error, {
+      context: 'items',
+      fallbackMessage: 'Unable to refresh saved item titles.',
+      toastMode: 'cooldown',
+      toastKey: 'item-title-refresh',
+    });
+    return;
+  }
   if (!token) return;
 
   let changed = false;
@@ -378,11 +437,23 @@ async function refreshSpotifyAccessToken() {
     client_id: clientId,
   });
 
-  const response = await fetch('https://accounts.spotify.com/api/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: formData,
-  });
+  let response;
+  try {
+    response = await fetch('https://accounts.spotify.com/api/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: formData,
+    });
+  } catch (error) {
+    reportError(error, {
+      context: 'auth',
+      fallbackMessage: 'Unable to refresh Spotify session.',
+      authStatusMessage: 'Network issue refreshing Spotify session. Please reconnect if this continues.',
+      toastMode: 'cooldown',
+      toastKey: 'refresh-token-network',
+    });
+    return null;
+  }
   if (!response.ok) return null;
 
   /** @type {{access_token: string; refresh_token?: string; expires_in: number; scope?: string}} */
@@ -593,21 +664,31 @@ async function playCurrentItem() {
     return;
   }
 
-  await spotifyApi('/me/player/shuffle?state=false', { method: 'PUT' }, token);
-  await spotifyApi('/me/player/repeat?state=off', { method: 'PUT' }, token);
+  try {
+    await spotifyApi('/me/player/shuffle?state=false', { method: 'PUT' }, token);
+    await spotifyApi('/me/player/repeat?state=off', { method: 'PUT' }, token);
 
-  await spotifyApi(
-    '/me/player/play',
-    {
-      method: 'PUT',
-      body: JSON.stringify({
-        context_uri: current.uri,
-        offset: { position: 0 },
-        position_ms: 0,
-      }),
-    },
-    token,
-  );
+    await spotifyApi(
+      '/me/player/play',
+      {
+        method: 'PUT',
+        body: JSON.stringify({
+          context_uri: current.uri,
+          offset: { position: 0 },
+          position_ms: 0,
+        }),
+      },
+      token,
+    );
+  } catch (error) {
+    reportError(error, {
+      context: 'playback',
+      fallbackMessage: 'Unable to start playback on Spotify.',
+      playbackStatusMessage: 'Could not start playback. Ensure an active Spotify device is available.',
+    });
+    stopSession('Playback failed. Session stopped.');
+    return;
+  }
 
   setPlaybackStatus(formatNowPlayingStatus(current));
 }
@@ -738,7 +819,15 @@ function spotifyIdFromUri(uri) {
 function startMonitorLoop() {
   if (monitorTimer !== null) clearInterval(monitorTimer);
   monitorTimer = window.setInterval(() => {
-    void monitorPlayback();
+    void monitorPlayback().catch((error) => {
+      reportError(error, {
+        context: 'monitor',
+        fallbackMessage: 'Playback monitor encountered an error.',
+        playbackStatusMessage: 'Playback monitor paused due to an error. Try restarting the session.',
+        toastMode: 'cooldown',
+        toastKey: 'monitor-loop',
+      });
+    });
   }, 4000);
 }
 
@@ -756,8 +845,32 @@ async function monitorPlayback() {
     return;
   }
 
+  if (!response.ok) {
+    const details = await response.text();
+    reportError(new Error(`Playback monitor request failed (${response.status}): ${details}`), {
+      context: 'monitor',
+      fallbackMessage: spotifyStatusMessage(response.status, 'Could not check playback state.'),
+      playbackStatusMessage: 'Unable to check playback state right now.',
+      toastMode: 'cooldown',
+      toastKey: `monitor-http-${response.status}`,
+    });
+    return;
+  }
+
   /** @type {{context?: {uri?: string} | null}} */
-  const data = await response.json();
+  let data;
+  try {
+    data = await response.json();
+  } catch (error) {
+    reportError(error, {
+      context: 'monitor',
+      fallbackMessage: 'Unexpected playback response from Spotify.',
+      playbackStatusMessage: 'Unable to read current playback state.',
+      toastMode: 'cooldown',
+      toastKey: 'monitor-json',
+    });
+    return;
+  }
   const contextUri = data?.context?.uri ?? null;
 
   if (contextUri === session.currentUri) {
@@ -910,9 +1023,79 @@ async function spotifyApi(path, init, token, throwOnError = true) {
 
   if (!response.ok && throwOnError) {
     const body = await response.text();
-    throw new Error(`Spotify API ${path} failed (${response.status}): ${body}`);
+    const message = spotifyStatusMessage(response.status, `Spotify API request failed for ${path}.`);
+    throw new Error(body ? `${message} ${body}` : message);
   }
   return response;
+}
+
+/**
+ * @param {unknown} error
+ * @param {{
+ *   context: string;
+ *   fallbackMessage: string;
+ *   authStatusMessage?: string;
+ *   playbackStatusMessage?: string;
+ *   toastMode?: 'always' | 'cooldown';
+ *   toastKey?: string;
+ * }} options
+ */
+function reportError(error, options) {
+  const message = errorMessageForUser(error, options.fallbackMessage);
+  console.error(`[${options.context}]`, error);
+  if (options.authStatusMessage) {
+    setAuthStatus(options.authStatusMessage);
+  }
+  if (options.playbackStatusMessage) {
+    setPlaybackStatus(options.playbackStatusMessage);
+  }
+
+  const toastKey = options.toastKey ?? `${options.context}:${message}`;
+  if (options.toastMode === 'cooldown') {
+    const lastAt = errorToastLastShownAt.get(toastKey) ?? 0;
+    if (Date.now() - lastAt >= ERROR_TOAST_COOLDOWN_MS) {
+      errorToastLastShownAt.set(toastKey, Date.now());
+      showToast(message, 'error');
+    }
+    return;
+  }
+
+  showToast(message, 'error');
+}
+
+/**
+ * @param {unknown} error
+ * @param {string} fallbackMessage
+ */
+function errorMessageForUser(error, fallbackMessage) {
+  const raw = error instanceof Error ? error.message : String(error ?? '');
+  if (raw && (/Failed to fetch/i.test(raw) || /NetworkError/i.test(raw))) {
+    return 'Network error while contacting Spotify. Please try again.';
+  }
+  return fallbackMessage;
+}
+
+/**
+ * @param {number} status
+ * @param {string} fallbackMessage
+ */
+function spotifyStatusMessage(status, fallbackMessage) {
+  if (status === 401) {
+    return 'Spotify session expired. Please reconnect.';
+  }
+  if (status === 403) {
+    return 'Spotify permissions are missing. Disconnect and reconnect.';
+  }
+  if (status === 404) {
+    return 'Requested Spotify item or playback device was not found.';
+  }
+  if (status === 429) {
+    return 'Spotify rate limit reached. Please wait a moment and retry.';
+  }
+  if (status >= 500) {
+    return 'Spotify is temporarily unavailable. Please try again shortly.';
+  }
+  return fallbackMessage;
 }
 
 /**
