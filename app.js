@@ -82,15 +82,18 @@ const errorToastLastShownAt = new Map();
 
 /** @typedef {{ actionLabel: string, onAction: () => void }} ToastAction */
 
-bootstrap().catch((error) => {
-  reportError(error, {
-    context: 'startup',
-    fallbackMessage: 'The app failed to initialize.',
-    authStatusMessage: 'Startup failed. Please refresh and reconnect Spotify.',
-    toastMode: 'cooldown',
-    toastKey: 'startup',
-  });
-});
+bootstrap().catch(
+  /** @param {unknown} error */
+  (error) => {
+    reportError(error, {
+      context: 'startup',
+      fallbackMessage: 'The app failed to initialize.',
+      authStatusMessage: 'Startup failed. Please refresh and reconnect Spotify.',
+      toastMode: 'cooldown',
+      toastKey: 'startup',
+    });
+  },
+);
 
 async function bootstrap() {
   el.redirectUri.textContent = location.origin + location.pathname;
@@ -122,13 +125,16 @@ async function ensureValidAccessToken() {
 
 function hookEvents() {
   el.loginBtn.addEventListener('click', () => {
-    void startLogin().catch((error) => {
-      reportError(error, {
-        context: 'auth',
-        fallbackMessage: 'Failed to start Spotify connection.',
-        authStatusMessage: 'Unable to connect right now. Please try again.',
-      });
-    });
+    void startLogin().catch(
+      /** @param {unknown} error */
+      (error) => {
+        reportError(error, {
+          context: 'auth',
+          fallbackMessage: 'Failed to start Spotify connection.',
+          authStatusMessage: 'Unable to connect right now. Please try again.',
+        });
+      },
+    );
   });
 
   el.logoutBtn.addEventListener('click', () => {
@@ -176,32 +182,41 @@ function hookEvents() {
   });
 
   el.startBtn.addEventListener('click', () => {
-    void startShuffleSession().catch((error) => {
-      reportError(error, {
-        context: 'playback',
-        fallbackMessage: 'Failed to start shuffle session.',
-        playbackStatusMessage: 'Unable to start session right now. Please try again.',
-      });
-    });
+    void startShuffleSession().catch(
+      /** @param {unknown} error */
+      (error) => {
+        reportError(error, {
+          context: 'playback',
+          fallbackMessage: 'Failed to start shuffle session.',
+          playbackStatusMessage: 'Unable to start session right now. Please try again.',
+        });
+      },
+    );
   });
 
   el.importPlaylistBtn.addEventListener('click', () => {
-    void importAlbumsFromPlaylist().catch((error) => {
-      reportError(error, {
-        context: 'import',
-        fallbackMessage: 'Failed to import albums from playlist.',
-      });
-    });
+    void importAlbumsFromPlaylist().catch(
+      /** @param {unknown} error */
+      (error) => {
+        reportError(error, {
+          context: 'import',
+          fallbackMessage: 'Failed to import albums from playlist.',
+        });
+      },
+    );
   });
 
   el.skipBtn.addEventListener('click', () => {
-    void goToNextItem().catch((error) => {
-      reportError(error, {
-        context: 'playback',
-        fallbackMessage: 'Failed to skip to the next item.',
-        playbackStatusMessage: 'Unable to skip right now. Please try again.',
-      });
-    });
+    void goToNextItem().catch(
+      /** @param {unknown} error */
+      (error) => {
+        reportError(error, {
+          context: 'playback',
+          fallbackMessage: 'Failed to skip to the next item.',
+          playbackStatusMessage: 'Unable to skip right now. Please try again.',
+        });
+      },
+    );
   });
 
   el.stopBtn.addEventListener('click', () => {
@@ -242,6 +257,7 @@ async function ensureStoredItemTitles() {
   const items = getItems();
   if (items.length === 0) return;
 
+  /** @type {string | null} */
   let token = null;
   try {
     token = await getUsableAccessToken();
@@ -257,6 +273,7 @@ async function ensureStoredItemTitles() {
   if (!token) return;
 
   let changed = false;
+  /** @type {ShuffleItem[]} */
   const updated = [];
   for (const item of items) {
     if (item.title) {
@@ -456,6 +473,7 @@ async function refreshSpotifyAccessToken() {
     client_id: clientId,
   });
 
+  /** @type {Response} */
   let response;
   try {
     response = await fetch('https://accounts.spotify.com/api/token', {
@@ -523,6 +541,7 @@ function importLocalStorageJson() {
     return;
   }
 
+  /** @type {[string, unknown][]} */
   const entries = Object.entries(parsed);
   localStorage.clear();
   for (const [key, value] of entries) {
@@ -562,15 +581,26 @@ function getItems() {
   if (!raw) return [];
 
   try {
+    /** @type {unknown} */
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed
+    /** @type {unknown[]} */
+    const parsedItems = parsed;
+    return parsedItems
       .filter(
-        (item) =>
-          item &&
-          typeof item === 'object' &&
-          (item.type === 'album' || item.type === 'playlist') &&
-          typeof item.uri === 'string',
+        /**
+         * @param {unknown} item
+         * @returns {item is {type: ItemType; uri: string; title?: unknown}}
+         */
+        (item) => {
+          if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
+          /** @type {Record<string, unknown>} */
+          const parsedItem = /** @type {Record<string, unknown>} */ (item);
+          return (
+            (parsedItem.type === 'album' || parsedItem.type === 'playlist') &&
+            typeof parsedItem.uri === 'string'
+          );
+        },
       )
       .map((item) => ({
         type: item.type,
@@ -864,15 +894,19 @@ function spotifyIdFromUri(uri) {
 function startMonitorLoop() {
   if (monitorTimer !== null) clearInterval(monitorTimer);
   monitorTimer = window.setInterval(() => {
-    void monitorPlayback().catch((error) => {
-      reportError(error, {
-        context: 'monitor',
-        fallbackMessage: 'Playback monitor encountered an error.',
-        playbackStatusMessage: 'Playback monitor paused due to an error. Try restarting the session.',
-        toastMode: 'cooldown',
-        toastKey: 'monitor-loop',
-      });
-    });
+    void monitorPlayback().catch(
+      /** @param {unknown} error */
+      (error) => {
+        reportError(error, {
+          context: 'monitor',
+          fallbackMessage: 'Playback monitor encountered an error.',
+          playbackStatusMessage:
+            'Playback monitor paused due to an error. Try restarting the session.',
+          toastMode: 'cooldown',
+          toastKey: 'monitor-loop',
+        });
+      },
+    );
   }, 4000);
 }
 
@@ -950,22 +984,27 @@ function restoreRuntimeState() {
   /** @type {Record<string, unknown>} */
   const parsed = /** @type {Record<string, unknown>} */ (parsedUnknown);
 
+  /** @type {unknown} */
   const queueValue = parsed.queue;
-  const restoredQueue = Array.isArray(queueValue)
-    ? queueValue.filter(
-        /** @param {unknown} item */
-        (item) => {
-          if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
-          /** @type {Record<string, unknown>} */
-          const runtimeItem = /** @type {Record<string, unknown>} */ (item);
-          return (
-            (runtimeItem.type === 'album' || runtimeItem.type === 'playlist') &&
-            typeof runtimeItem.uri === 'string' &&
-            typeof runtimeItem.title === 'string'
-          );
-        },
-      )
-    : [];
+  /** @type {unknown[]} */
+  const queueItems = Array.isArray(queueValue) ? queueValue : [];
+  /** @type {ShuffleItem[]} */
+  const restoredQueue = queueItems.filter(
+    /**
+     * @param {unknown} item
+     * @returns {item is ShuffleItem}
+     */
+    (item) => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
+      /** @type {Record<string, unknown>} */
+      const runtimeItem = /** @type {Record<string, unknown>} */ (item);
+      return (
+        (runtimeItem.type === 'album' || runtimeItem.type === 'playlist') &&
+        typeof runtimeItem.uri === 'string' &&
+        typeof runtimeItem.title === 'string'
+      );
+    },
+  );
 
   const indexValue = parsed.index;
   const restoredIndex =
