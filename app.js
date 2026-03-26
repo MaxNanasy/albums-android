@@ -85,13 +85,13 @@ const errorToastLastShownAt = new Map();
 bootstrap().catch(
   /** @param {unknown} error */
   (error) => {
-  reportError(error, {
-    context: 'startup',
-    fallbackMessage: 'The app failed to initialize.',
-    authStatusMessage: 'Startup failed. Please refresh and reconnect Spotify.',
-    toastMode: 'cooldown',
-    toastKey: 'startup',
-  });
+    reportError(error, {
+      context: 'startup',
+      fallbackMessage: 'The app failed to initialize.',
+      authStatusMessage: 'Startup failed. Please refresh and reconnect Spotify.',
+      toastMode: 'cooldown',
+      toastKey: 'startup',
+    });
   },
 );
 
@@ -128,11 +128,11 @@ function hookEvents() {
     void startLogin().catch(
       /** @param {unknown} error */
       (error) => {
-      reportError(error, {
-        context: 'auth',
-        fallbackMessage: 'Failed to start Spotify connection.',
-        authStatusMessage: 'Unable to connect right now. Please try again.',
-      });
+        reportError(error, {
+          context: 'auth',
+          fallbackMessage: 'Failed to start Spotify connection.',
+          authStatusMessage: 'Unable to connect right now. Please try again.',
+        });
       },
     );
   });
@@ -185,11 +185,11 @@ function hookEvents() {
     void startShuffleSession().catch(
       /** @param {unknown} error */
       (error) => {
-      reportError(error, {
-        context: 'playback',
-        fallbackMessage: 'Failed to start shuffle session.',
-        playbackStatusMessage: 'Unable to start session right now. Please try again.',
-      });
+        reportError(error, {
+          context: 'playback',
+          fallbackMessage: 'Failed to start shuffle session.',
+          playbackStatusMessage: 'Unable to start session right now. Please try again.',
+        });
       },
     );
   });
@@ -198,10 +198,10 @@ function hookEvents() {
     void importAlbumsFromPlaylist().catch(
       /** @param {unknown} error */
       (error) => {
-      reportError(error, {
-        context: 'import',
-        fallbackMessage: 'Failed to import albums from playlist.',
-      });
+        reportError(error, {
+          context: 'import',
+          fallbackMessage: 'Failed to import albums from playlist.',
+        });
       },
     );
   });
@@ -210,11 +210,11 @@ function hookEvents() {
     void goToNextItem().catch(
       /** @param {unknown} error */
       (error) => {
-      reportError(error, {
-        context: 'playback',
-        fallbackMessage: 'Failed to skip to the next item.',
-        playbackStatusMessage: 'Unable to skip right now. Please try again.',
-      });
+        reportError(error, {
+          context: 'playback',
+          fallbackMessage: 'Failed to skip to the next item.',
+          playbackStatusMessage: 'Unable to skip right now. Please try again.',
+        });
       },
     );
   });
@@ -897,13 +897,14 @@ function startMonitorLoop() {
     void monitorPlayback().catch(
       /** @param {unknown} error */
       (error) => {
-      reportError(error, {
-        context: 'monitor',
-        fallbackMessage: 'Playback monitor encountered an error.',
-        playbackStatusMessage: 'Playback monitor paused due to an error. Try restarting the session.',
-        toastMode: 'cooldown',
-        toastKey: 'monitor-loop',
-      });
+        reportError(error, {
+          context: 'monitor',
+          fallbackMessage: 'Playback monitor encountered an error.',
+          playbackStatusMessage:
+            'Playback monitor paused due to an error. Try restarting the session.',
+          toastMode: 'cooldown',
+          toastKey: 'monitor-loop',
+        });
       },
     );
   }, 4000);
@@ -989,21 +990,21 @@ function restoreRuntimeState() {
   const queueItems = Array.isArray(queueValue) ? queueValue : [];
   /** @type {ShuffleItem[]} */
   const restoredQueue = queueItems.filter(
-        /**
-         * @param {unknown} item
-         * @returns {item is ShuffleItem}
-         */
-        (item) => {
-          if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
-          /** @type {Record<string, unknown>} */
-          const runtimeItem = /** @type {Record<string, unknown>} */ (item);
-          return (
-            (runtimeItem.type === 'album' || runtimeItem.type === 'playlist') &&
-            typeof runtimeItem.uri === 'string' &&
-            typeof runtimeItem.title === 'string'
-          );
-        },
+    /**
+     * @param {unknown} item
+     * @returns {item is ShuffleItem}
+     */
+    (item) => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
+      /** @type {Record<string, unknown>} */
+      const runtimeItem = /** @type {Record<string, unknown>} */ (item);
+      return (
+        (runtimeItem.type === 'album' || runtimeItem.type === 'playlist') &&
+        typeof runtimeItem.uri === 'string' &&
+        typeof runtimeItem.title === 'string'
       );
+    },
+  );
 
   const indexValue = parsed.index;
   const restoredIndex =
