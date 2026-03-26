@@ -11,5 +11,8 @@
     "detail": true,
     "strict": true,
     "showRelativePath": true
+  },
+  "scripts": {
+    "typecheck": "sh -c 'tsc; tsc_status=$?; type-coverage; tc_status=$?; [ $tsc_status -eq 0 ] && [ $tc_status -eq 0 ]'"
   }
 }
