@@ -80,18 +80,13 @@ const errorToastLastShownAt = new Map();
 
 /** @typedef {{ actionLabel: string, onAction: () => void }} ToastAction */
 
-bootstrap().catch(
-  /** @param {unknown} error */
-  (error) => {
-    reportError(error, {
-      context: 'startup',
-      fallbackMessage: 'The app failed to initialize.',
-      authStatusMessage: 'Startup failed. Please refresh and reconnect Spotify.',
-      toastMode: 'cooldown',
-      toastKey: 'startup',
-    });
-  },
-);
+void runWithReportedError(bootstrap, {
+  context: 'startup',
+  fallbackMessage: 'The app failed to initialize.',
+  authStatusMessage: 'Startup failed. Please refresh and reconnect Spotify.',
+  toastMode: 'cooldown',
+  toastKey: 'startup',
+});
 
 async function bootstrap() {
   hookEvents();
@@ -105,31 +100,24 @@ async function bootstrap() {
 }
 
 async function ensureValidAccessToken() {
-  try {
+  await runWithReportedError(async () => {
     await getUsableAccessToken();
-  } catch (error) {
-    reportError(error, {
-      context: 'auth',
-      fallbackMessage: 'Unable to validate Spotify session.',
-      authStatusMessage: 'Unable to validate Spotify session. Please reconnect.',
-      toastMode: 'cooldown',
-      toastKey: 'auth-validate',
-    });
-  }
+  }, {
+    context: 'auth',
+    fallbackMessage: 'Unable to validate Spotify session.',
+    authStatusMessage: 'Unable to validate Spotify session. Please reconnect.',
+    toastMode: 'cooldown',
+    toastKey: 'auth-validate',
+  });
 }
 
 function hookEvents() {
   el.loginBtn.addEventListener('click', () => {
-    void startLogin().catch(
-      /** @param {unknown} error */
-      (error) => {
-        reportError(error, {
-          context: 'auth',
-          fallbackMessage: 'Failed to start Spotify connection.',
-          authStatusMessage: 'Unable to connect right now. Please try again.',
-        });
-      },
-    );
+    void runWithReportedError(() => startLogin(), {
+      context: 'auth',
+      fallbackMessage: 'Failed to start Spotify connection.',
+      authStatusMessage: 'Unable to connect right now. Please try again.',
+    });
   });
 
   el.logoutBtn.addEventListener('click', () => {
@@ -177,41 +165,26 @@ function hookEvents() {
   });
 
   el.startBtn.addEventListener('click', () => {
-    void startShuffleSession().catch(
-      /** @param {unknown} error */
-      (error) => {
-        reportError(error, {
-          context: 'playback',
-          fallbackMessage: 'Failed to start shuffle session.',
-          playbackStatusMessage: 'Unable to start session right now. Please try again.',
-        });
-      },
-    );
+    void runWithReportedError(() => startShuffleSession(), {
+      context: 'playback',
+      fallbackMessage: 'Failed to start shuffle session.',
+      playbackStatusMessage: 'Unable to start session right now. Please try again.',
+    });
   });
 
   el.importPlaylistBtn.addEventListener('click', () => {
-    void importAlbumsFromPlaylist().catch(
-      /** @param {unknown} error */
-      (error) => {
-        reportError(error, {
-          context: 'import',
-          fallbackMessage: 'Failed to import albums from playlist.',
-        });
-      },
-    );
+    void runWithReportedError(() => importAlbumsFromPlaylist(), {
+      context: 'import',
+      fallbackMessage: 'Failed to import albums from playlist.',
+    });
   });
 
   el.skipBtn.addEventListener('click', () => {
-    void goToNextItem().catch(
-      /** @param {unknown} error */
-      (error) => {
-        reportError(error, {
-          context: 'playback',
-          fallbackMessage: 'Failed to skip to the next item.',
-          playbackStatusMessage: 'Unable to skip right now. Please try again.',
-        });
-      },
-    );
+    void runWithReportedError(() => goToNextItem(), {
+      context: 'playback',
+      fallbackMessage: 'Failed to skip to the next item.',
+      playbackStatusMessage: 'Unable to skip right now. Please try again.',
+    });
   });
 
   el.stopBtn.addEventListener('click', () => {
@@ -252,17 +225,13 @@ async function ensureStoredItemTitles() {
   const items = getItems();
   if (items.length === 0) return;
 
-  /** @type {string | null} */
-  let token = null;
-  try {
-    token = await getUsableAccessToken();
-  } catch (error) {
-    reportError(error, {
-      context: 'items',
-      fallbackMessage: 'Unable to refresh saved item titles.',
-      toastMode: 'cooldown',
-      toastKey: 'item-title-refresh',
-    });
+  const token = await runWithReportedError(() => getUsableAccessToken(), {
+    context: 'items',
+    fallbackMessage: 'Unable to refresh saved item titles.',
+    toastMode: 'cooldown',
+    toastKey: 'item-title-refresh',
+  });
+  if (token === undefined) {
     return;
   }
   if (!token) return;
@@ -459,22 +428,22 @@ async function refreshSpotifyAccessToken() {
     client_id: SPOTIFY_APP_ID,
   });
 
-  /** @type {Response} */
-  let response;
-  try {
-    response = await fetch('https://accounts.spotify.com/api/token', {
+  const response = await runWithReportedError(
+    () =>
+      fetch('https://accounts.spotify.com/api/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: formData,
-    });
-  } catch (error) {
-    reportError(error, {
+      }),
+    {
       context: 'auth',
       fallbackMessage: 'Unable to refresh Spotify session.',
       authStatusMessage: 'Network issue refreshing Spotify session. Please reconnect if this continues.',
       toastMode: 'cooldown',
       toastKey: 'refresh-token-network',
-    });
+    },
+  );
+  if (!response) {
     return null;
   }
   if (!response.ok) return null;
@@ -879,19 +848,13 @@ function spotifyIdFromUri(uri) {
 function startMonitorLoop() {
   if (monitorTimer !== null) clearInterval(monitorTimer);
   monitorTimer = window.setInterval(() => {
-    void monitorPlayback().catch(
-      /** @param {unknown} error */
-      (error) => {
-        reportError(error, {
-          context: 'monitor',
-          fallbackMessage: 'Playback monitor encountered an error.',
-          playbackStatusMessage:
-            'Playback monitor paused due to an error. Try restarting the session.',
-          toastMode: 'cooldown',
-          toastKey: 'monitor-loop',
-        });
-      },
-    );
+    void runWithReportedError(() => monitorPlayback(), {
+      context: 'monitor',
+      fallbackMessage: 'Playback monitor encountered an error.',
+      playbackStatusMessage: 'Playback monitor paused due to an error. Try restarting the session.',
+      toastMode: 'cooldown',
+      toastKey: 'monitor-loop',
+    });
   }, 4000);
 }
 
@@ -921,21 +884,21 @@ async function monitorPlayback() {
     return;
   }
 
-  /** @type {{context?: {uri?: string} | null}} */
-  let data;
-  try {
-    data = await response.json();
-  } catch (error) {
-    reportError(error, {
+  const data = await runWithReportedError(
+    async () =>
+      /** @type {{context?: {uri?: string} | null}} */ (await response.json()),
+    {
       context: 'monitor',
       fallbackMessage: 'Unexpected playback response from Spotify.',
       playbackStatusMessage: 'Unable to read current playback state.',
       toastMode: 'cooldown',
       toastKey: 'monitor-json',
-    });
+    },
+  );
+  if (!data) {
     return;
   }
-  const contextUri = data?.context?.uri ?? null;
+  const contextUri = data.context?.uri ?? null;
 
   if (contextUri === session.currentUri) {
     session.observedCurrentContext = true;
@@ -1099,15 +1062,23 @@ async function spotifyApi(path, init, token, throwOnError = true) {
 }
 
 /**
+ * @template T
+ * @param {() => T | Promise<T>} task
+ * @param {ErrorReportOptions} reportErrorOptions
+ * @returns {Promise<T | undefined>}
+ */
+async function runWithReportedError(task, reportErrorOptions) {
+  try {
+    return await task();
+  } catch (error) {
+    reportError(error, reportErrorOptions);
+    return undefined;
+  }
+}
+
+/**
  * @param {unknown} error
- * @param {{
- *   context: string;
- *   fallbackMessage: string;
- *   authStatusMessage?: string;
- *   playbackStatusMessage?: string;
- *   toastMode?: 'always' | 'cooldown';
- *   toastKey?: string;
- * }} options
+ * @param {ErrorReportOptions} options
  */
 function reportError(error, options) {
   const message = errorMessageForUser(error, options.fallbackMessage);
@@ -1131,6 +1102,17 @@ function reportError(error, options) {
 
   showToast(message, 'error');
 }
+
+/**
+ * @typedef {{
+ *   context: string;
+ *   fallbackMessage: string;
+ *   authStatusMessage?: string;
+ *   playbackStatusMessage?: string;
+ *   toastMode?: 'always' | 'cooldown';
+ *   toastKey?: string;
+ * }} ErrorReportOptions
+ */
 
 /**
  * @param {unknown} error
