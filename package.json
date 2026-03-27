@@ -2,6 +2,7 @@
   "name": "shuffle-by-album",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "devDependencies": {
     "type-coverage": "^2.29.7",
     "typescript": "^6.0.2"
