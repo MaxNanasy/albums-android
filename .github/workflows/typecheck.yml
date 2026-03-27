@@ -2,8 +2,6 @@ name: Typecheck
 
 on:
   push:
-    branches:
-      - '**'
 
 jobs:
   tsc:
