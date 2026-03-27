@@ -9,7 +9,7 @@
 
 /**
  * @typedef SessionState
- * @property {boolean} active
+ * @property {'inactive' | 'active' | 'detached'} activationState
  * @property {ShuffleItem[]} queue
  * @property {number} index
  * @property {string | null} currentUri
@@ -47,6 +47,7 @@ const el = {
   ),
   itemList: /** @type {HTMLUListElement} */ (document.getElementById('item-list')),
   startBtn: /** @type {HTMLButtonElement} */ (document.getElementById('start-btn')),
+  reattachBtn: /** @type {HTMLButtonElement} */ (document.getElementById('reattach-btn')),
   skipBtn: /** @type {HTMLButtonElement} */ (document.getElementById('skip-btn')),
   stopBtn: /** @type {HTMLButtonElement} */ (document.getElementById('stop-btn')),
   playbackStatus: /** @type {HTMLParagraphElement} */ (document.getElementById('playback-status')),
@@ -63,7 +64,7 @@ const el = {
 
 /** @type {SessionState} */
 const session = {
-  active: false,
+  activationState: 'inactive',
   queue: [],
   index: 0,
   currentUri: null,
@@ -93,6 +94,7 @@ async function bootstrap() {
   await ensureValidAccessToken();
   renderItemList();
   renderSessionQueue();
+  renderPlaybackControls();
   refreshAuthStatus();
   await ensureStoredItemTitles();
 }
@@ -167,6 +169,14 @@ function hookEvents() {
       context: 'playback',
       fallbackMessage: 'Failed to start shuffle session.',
       playbackStatusMessage: 'Unable to start session right now. Please try again.',
+    });
+  });
+
+  el.reattachBtn.addEventListener('click', () => {
+    void runWithReportedError(() => reattachSession(), {
+      context: 'playback',
+      fallbackMessage: 'Failed to reattach Spotify playback.',
+      playbackStatusMessage: 'Unable to reattach right now. Please try again.',
     });
   });
 
@@ -636,34 +646,71 @@ async function startShuffleSession() {
   }
 
   session.queue = shuffledCopy(items);
-  session.active = true;
+  session.activationState = 'active';
   session.index = 0;
   persistRuntimeState();
   renderSessionQueue();
+  renderPlaybackControls();
 
   setPlaybackStatus(`Session started with ${session.queue.length} item(s).`);
   await playCurrentItem();
-  startMonitorLoop();
+  if (session.activationState === 'active') {
+    startMonitorLoop();
+  }
 }
 
 /** @param {string} message */
 function stopSession(message) {
-  session.active = false;
+  transitionToInactive(message);
+}
+
+/** @param {string} message */
+function transitionToInactive(message) {
+  stopMonitorLoop();
+  session.activationState = 'inactive';
   session.queue = [];
   session.index = 0;
   session.currentUri = null;
   session.observedCurrentContext = false;
   clearRuntimeState();
+  renderSessionQueue();
+  renderPlaybackControls();
+  setPlaybackStatus(message);
+}
+
+/** @param {string} message */
+function transitionToDetached(message) {
+  if (session.activationState === 'inactive') {
+    return;
+  }
+  stopMonitorLoop();
+  session.activationState = 'detached';
+  persistRuntimeState();
+  renderPlaybackControls();
+  setPlaybackStatus(message);
+}
+
+function stopMonitorLoop() {
   if (monitorTimer !== null) {
     clearInterval(monitorTimer);
     monitorTimer = null;
   }
-  renderSessionQueue();
-  setPlaybackStatus(message);
+}
+
+function renderPlaybackControls() {
+  const isInactive = session.activationState === 'inactive';
+  const isActive = session.activationState === 'active';
+  const isDetached = session.activationState === 'detached';
+
+  el.startBtn.disabled = !isInactive;
+  el.skipBtn.disabled = !isActive;
+  el.stopBtn.disabled = isInactive;
+  el.reattachBtn.hidden = !isDetached;
+  el.reattachBtn.disabled = !isDetached;
 }
 
 async function goToNextItem() {
-  if (!session.active) {
+  if (session.activationState !== 'active') {
     setPlaybackStatus('No active session.');
     return;
   }
@@ -679,11 +726,67 @@ async function goToNextItem() {
   await playCurrentItem();
 }
 
+async function reattachSession() {
+  if (session.activationState !== 'detached') {
+    return;
+  }
+  const current = session.queue[session.index];
+  if (!current) {
+    transitionToInactive('No queued item available to reattach.');
+    return;
+  }
+
+  const token = await getUsableAccessToken();
+  if (!token) {
+    transitionToDetached('Spotify session expired. Please reconnect.');
+    return;
+  }
+
+  const response = await spotifyApi('/me/player', { method: 'GET' }, token, false);
+  if (!response.ok && response.status !== 204) {
+    if (isUnrecoverableSpotifyStatus(response.status)) {
+      transitionToDetached(spotifyStatusMessage(response.status, 'Unable to reattach playback state.'));
+      return;
+    }
+    const details = await response.text();
+    throw new Error(`Unable to check current Spotify playback (${response.status}): ${details}`);
+  }
+
+  /** @type {string | null} */
+  let contextUri = null;
+  if (response.status !== 204) {
+    /** @type {{context?: {uri?: string} | null}} */
+    const data = await response.json();
+    contextUri = data.context?.uri ?? null;
+  }
+
+  if (contextUri !== current.uri) {
+    session.activationState = 'active';
+    await playCurrentItem();
+  } else {
+    session.currentUri = current.uri;
+    session.observedCurrentContext = true;
+    session.activationState = 'active';
+    persistRuntimeState();
+    renderPlaybackControls();
+    setPlaybackStatus(formatNowPlayingStatus(current));
+  }
+  if (session.activationState === 'active') {
+    startMonitorLoop();
+  }
+}
+
 async function playCurrentItem() {
   const current = session.queue[session.index];
+  if (!current) {
+    transitionToInactive('Finished: all selected albums/playlists were played.');
+    return;
+  }
   session.currentUri = current.uri;
   session.observedCurrentContext = false;
+  session.activationState = 'active';
   persistRuntimeState();
+  renderPlaybackControls();
 
   const token = await getUsableAccessToken();
   if (!token) {
@@ -713,6 +816,10 @@ async function playCurrentItem() {
       fallbackMessage: 'Unable to start playback on Spotify.',
       playbackStatusMessage: 'Could not start playback. Ensure an active Spotify device is available.',
     });
+    if (isUnrecoverableSpotifyError(error)) {
+      transitionToDetached('Playback detached due to a Spotify error. Reattach when ready.');
+      return;
+    }
     stopSession('Playback failed. Session stopped.');
     return;
   }
@@ -844,7 +951,7 @@ function spotifyIdFromUri(uri) {
 }
 
 function startMonitorLoop() {
-  if (monitorTimer !== null) clearInterval(monitorTimer);
+  stopMonitorLoop();
   monitorTimer = window.setInterval(() => {
     void runWithReportedError(() => monitorPlayback(), {
       context: 'monitor',
@@ -857,10 +964,10 @@ function startMonitorLoop() {
 }
 
 async function monitorPlayback() {
-  if (!session.active || !session.currentUri) return;
+  if (session.activationState !== 'active' || !session.currentUri) return;
   const token = await getUsableAccessToken();
   if (!token) {
-    stopSession('Spotify session expired. Please reconnect.');
+    transitionToDetached('Spotify session expired. Please reconnect.');
     return;
   }
 
@@ -871,6 +978,10 @@ async function monitorPlayback() {
   }
 
   if (!response.ok) {
+    if (isUnrecoverableSpotifyStatus(response.status)) {
+      transitionToDetached(spotifyStatusMessage(response.status, 'Spotify playback monitor detached.'));
+      return;
+    }
     const details = await response.text();
     reportError(new Error(`Playback monitor request failed (${response.status}): ${details}`), {
       context: 'monitor',
@@ -904,9 +1015,16 @@ async function monitorPlayback() {
     return;
   }
 
-  if (session.observedCurrentContext && contextUri !== session.currentUri) {
-    // Current context moved away (likely finished, or user manually changed it).
+  if (session.observedCurrentContext && contextUri === null) {
+    // Current context is no longer active (likely finished).
     await goToNextItem();
+    return;
+  }
+
+  if (contextUri && contextUri !== session.currentUri) {
+    transitionToDetached(
+      'Spotify is playing a different album/playlist than this app expects. Reattach to resume.',
+    );
   }
 }
 
@@ -959,15 +1077,28 @@ function restoreRuntimeState() {
       : 0;
   const restoredCurrentUri = typeof parsed.currentUri === 'string' ? parsed.currentUri : null;
   const restoredObserved = parsed.observedCurrentContext === true;
-  const restoredActive = parsed.active === true && restoredQueue.length > 0;
+  const activationStateValue = parsed.activationState;
+  let restoredActivationState = /** @type {'inactive' | 'active' | 'detached'} */ ('inactive');
+  if (
+    activationStateValue === 'active' ||
+    activationStateValue === 'detached' ||
+    activationStateValue === 'inactive'
+  ) {
+    restoredActivationState = activationStateValue;
+  } else if (parsed.active === true) {
+    restoredActivationState = 'active';
+  }
+  if (restoredQueue.length === 0) {
+    restoredActivationState = 'inactive';
+  }
 
   session.queue = restoredQueue;
   session.index = Math.min(restoredIndex, Math.max(0, restoredQueue.length - 1));
   session.currentUri = restoredCurrentUri;
   session.observedCurrentContext = restoredObserved;
-  session.active = restoredActive;
+  session.activationState = restoredActivationState;
 
-  if (!session.active) {
+  if (session.activationState === 'inactive') {
     clearRuntimeState();
     return;
   }
@@ -975,14 +1106,18 @@ function restoreRuntimeState() {
   const current = session.queue[session.index];
   setPlaybackStatus(formatNowPlayingStatus(current));
   renderSessionQueue();
-  startMonitorLoop();
+  renderPlaybackControls();
+  if (session.activationState === 'active') {
+    startMonitorLoop();
+  }
 }
 
 function persistRuntimeState() {
   localStorage.setItem(
     STORAGE_KEYS.runtime,
     JSON.stringify({
-      active: session.active,
+      active: session.activationState === 'active',
+      activationState: session.activationState,
       queue: session.queue,
       index: session.index,
       currentUri: session.currentUri,
@@ -997,7 +1132,7 @@ function clearRuntimeState() {
 
 function renderSessionQueue() {
   el.queueList.innerHTML = '';
-  if (!session.active || session.queue.length === 0) return;
+  if (session.activationState === 'inactive' || session.queue.length === 0) return;
 
   for (let i = 0; i < session.queue.length; i += 1) {
     const item = session.queue[i];
@@ -1046,7 +1181,7 @@ async function spotifyApi(path, init, token, throwOnError = true) {
 
     if (response.status === 401) {
       clearAuth();
-      stopSession('Spotify session expired. Please reconnect.');
+      transitionToDetached('Spotify session expired. Please reconnect.');
       setAuthStatus('Spotify session expired. Please reconnect.');
     }
   }
@@ -1054,7 +1189,9 @@ async function spotifyApi(path, init, token, throwOnError = true) {
   if (!response.ok && throwOnError) {
     const body = await response.text();
     const message = spotifyStatusMessage(response.status, `Spotify API request failed for ${path}.`);
-    throw new Error(body ? `${message} ${body}` : message);
+    const error = new Error(body ? `${message} ${body}` : message);
+    /** @type {Error & {spotifyStatus?: number}} */ (error).spotifyStatus = response.status;
+    throw error;
   }
   return response;
 }
@@ -1145,6 +1282,24 @@ function spotifyStatusMessage(status, fallbackMessage) {
     return 'Spotify is temporarily unavailable. Please try again shortly.';
   }
   return fallbackMessage;
+}
+
+/**
+ * @param {unknown} error
+ * @returns {boolean}
+ */
+function isUnrecoverableSpotifyError(error) {
+  if (!(error instanceof Error)) return false;
+  const status = /** @type {Error & {spotifyStatus?: unknown}} */ (error).spotifyStatus;
+  return typeof status === 'number' && isUnrecoverableSpotifyStatus(status);
+}
+
+/**
+ * @param {number} status
+ * @returns {boolean}
+ */
+function isUnrecoverableSpotifyStatus(status) {
+  return status === 401 || status === 403 || status === 404;
 }
 
 /**

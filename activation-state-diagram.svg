@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="560" viewBox="0 0 980 560" role="img" aria-labelledby="title desc">
+  <title id="title">Shuffle By Album activation state diagram</title>
+  <desc id="desc">Flowchart showing transitions between Inactive, Active, and Detached states.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#2f3a4a" />
+    </marker>
+    <style>
+      .state { fill: #f5f7fb; stroke: #2f3a4a; stroke-width: 2; }
+      .title { font: 700 24px sans-serif; fill: #1f2937; }
+      .label { font: 600 19px sans-serif; fill: #111827; }
+      .caption { font: 15px sans-serif; fill: #111827; }
+      .edge { stroke: #2f3a4a; stroke-width: 2.2; fill: none; marker-end: url(#arrow); }
+      .edge-text { font: 14px sans-serif; fill: #111827; }
+    </style>
+  </defs>
+
+  <text x="490" y="44" text-anchor="middle" class="title">Activation State Flowchart</text>
+
+  <rect class="state" x="84" y="140" rx="14" ry="14" width="220" height="94" />
+  <text class="label" x="194" y="192" text-anchor="middle">Inactive</text>
+  <text class="caption" x="194" y="220" text-anchor="middle">(initial state)</text>
+
+  <rect class="state" x="382" y="140" rx="14" ry="14" width="220" height="94" />
+  <text class="label" x="492" y="194" text-anchor="middle">Active</text>
+
+  <rect class="state" x="680" y="140" rx="14" ry="14" width="220" height="94" />
+  <text class="label" x="790" y="194" text-anchor="middle">Detached</text>
+
+  <path class="edge" d="M304 186 H382" />
+  <text class="edge-text" x="343" y="170" text-anchor="middle">Start play succeeds</text>
+
+  <path class="edge" d="M492 234 V332 H194 V234" />
+  <text class="edge-text" x="343" y="324" text-anchor="middle">Stop clicked OR queue finishes</text>
+  <text class="edge-text" x="343" y="344" text-anchor="middle">(clear runtime queue + position)</text>
+
+  <path class="edge" d="M602 186 H680" />
+  <text class="edge-text" x="641" y="168" text-anchor="middle">Unrecoverable Spotify error</text>
+
+  <path class="edge" d="M600 204 H680" />
+  <text class="edge-text" x="640" y="258" text-anchor="middle">Spotify context differs from app context</text>
+
+  <path class="edge" d="M790 234 V332 H492 V234" />
+  <text class="edge-text" x="640" y="324" text-anchor="middle">Reattach button</text>
+  <text class="edge-text" x="640" y="344" text-anchor="middle">(preserve queue + index)</text>
+
+  <text class="caption" x="72" y="410">Detached behavior:</text>
+  <text class="caption" x="72" y="434">• Transition stops play-state monitor.</text>
+  <text class="caption" x="72" y="456">• Queue and current index are retained.</text>
+  <text class="caption" x="72" y="478">• Reattach checks Spotify context; if different, app context is played before monitoring resumes.</text>
+
+  <text class="caption" x="72" y="518">Any transition to Inactive or Detached stops the play-state monitor.</text>
+</svg>
