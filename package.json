@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "scripts": {
+    "typecheck": "sh -c 'tsc; tsc_status=$?; type-coverage; tc_status=$?; [ $tsc_status -eq 0 ] && [ $tc_status -eq 0 ]'"
+  },
   "devDependencies": {
     "type-coverage": "^2.29.7",
     "typescript": "^6.0.2"
@@ -12,8 +15,5 @@
     "detail": true,
     "strict": true,
     "showRelativePath": true
-  },
-  "scripts": {
-    "typecheck": "sh -c 'tsc; tsc_status=$?; type-coverage; tc_status=$?; [ $tsc_status -eq 0 ] && [ $tc_status -eq 0 ]'"
   }
 }
