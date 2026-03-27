@@ -1,1 +1,1 @@
-Ensure `npm run typecheck` succeeds after any changes
+Ensure `npm run check` succeeds after any changes
