@@ -246,7 +246,7 @@
                     android:layout_height="180dp"
                     android:layout_marginTop="8dp"
                     android:gravity="top|start"
-                    android:hint="{\"spotifyShuffler.items\":\"[...]\"}"
+                    android:hint="{&quot;spotifyShuffler.items&quot;:&quot;[...]&quot;}"
                     android:inputType="textMultiLine"
                     android:scrollbars="vertical" />
             </LinearLayout>
