@@ -1032,6 +1032,11 @@ async function monitorPlayback() {
     return;
   }
 
+  if (!session.observedCurrentContext) {
+    // Ignore transient mismatch while a new context is still starting.
+    return;
+  }
+
   if (session.observedCurrentContext && contextUri === null) {
     // Current context is no longer active (likely finished).
     await goToNextItem();
