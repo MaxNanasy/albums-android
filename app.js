@@ -77,6 +77,23 @@ const ERROR_TOAST_COOLDOWN_MS = 45000;
 /** @type {Map<string, number>} */
 const errorToastLastShownAt = new Map();
 
+class SpotifyApiHttpError extends Error {
+  /** @type {string} */
+  name;
+  /** @type {number} */
+  status;
+
+  /**
+   * @param {number} status
+   * @param {string} message
+   */
+  constructor(status, message) {
+    super(message);
+    this.name = 'SpotifyApiHttpError';
+    this.status = status;
+  }
+}
+
 /** @typedef {{ actionLabel: string, onAction: () => void }} ToastAction */
 
 void runWithReportedError(bootstrap, {
@@ -816,8 +833,7 @@ async function playCurrentItem() {
       fallbackMessage: 'Unable to start playback on Spotify.',
       playbackStatusMessage: 'Could not start playback. Ensure an active Spotify device is available.',
     });
-    const errorText = error instanceof Error ? error.message : '';
-    if (isUnrecoverableSpotifyError(error) || /not found/i.test(errorText)) {
+    if (isUnrecoverableSpotifyError(error)) {
       transitionToDetached('Playback detached due to a Spotify error. Reattach when ready.');
       return;
     }
@@ -1190,9 +1206,7 @@ async function spotifyApi(path, init, token, throwOnError = true) {
   if (!response.ok && throwOnError) {
     const body = await response.text();
     const message = spotifyStatusMessage(response.status, `Spotify API request failed for ${path}.`);
-    const error = new Error(body ? `${message} ${body}` : message);
-    /** @type {Error & {spotifyStatus?: number}} */ (error).spotifyStatus = response.status;
-    throw error;
+    throw new SpotifyApiHttpError(response.status, body ? `${message} ${body}` : message);
   }
   return response;
 }
@@ -1299,18 +1313,10 @@ function isUnrecoverableSpotifyError(error) {
  * @returns {number | null}
  */
 function spotifyStatusFromError(error) {
+  if (error instanceof SpotifyApiHttpError) return error.status;
   if (!(error instanceof Error)) return null;
-  const status = /** @type {Error & {spotifyStatus?: unknown}} */ (error).spotifyStatus;
-  if (typeof status === 'number') {
-    return status;
-  }
-
-  const match = error.message.match(/\b\((\d{3})\)\b/);
-  if (!match) {
-    return null;
-  }
-  const parsed = Number(match[1]);
-  return Number.isInteger(parsed) ? parsed : null;
+  const legacyStatus = /** @type {Error & {spotifyStatus?: unknown}} */ (error).spotifyStatus;
+  return typeof legacyStatus === 'number' ? legacyStatus : null;
 }
 
 /**
