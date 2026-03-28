@@ -1,1 +1,7 @@
-node_modules/
+.gradle/
+/local.properties
+/.idea/
+.DS_Store
+/build/
+/app/build/
+*.iml
