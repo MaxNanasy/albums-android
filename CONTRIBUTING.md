@@ -1,1 +1,1 @@
-Ensure `scripts/check` succeeds after any changes
+Ensure `./gradlew check` succeeds after any changes
