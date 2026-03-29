@@ -388,7 +388,13 @@ class MainActivity : AppCompatActivity() {
 
     private fun exportStorageJson() {
         val data = JSONObject().apply {
-            prefs.all.forEach { (key, value) -> put(key, value?.toString() ?: "") }
+            prefs.all.forEach { (key, value) ->
+                when (value) {
+                    null -> put(key, JSONObject.NULL)
+                    is Set<*> -> put(key, JSONArray(value.toList()))
+                    else -> put(key, value)
+                }
+            }
         }
         storageJsonInput.setText(data.toString(2))
         toast("Exported ${prefs.all.size} key(s) to JSON.")
@@ -404,12 +410,35 @@ class MainActivity : AppCompatActivity() {
             return toast("Invalid JSON.")
         }
 
-        prefs.edit().clear().apply()
+        val editor = prefs.edit().clear()
         val keys = parsed.keys()
         while (keys.hasNext()) {
             val key = keys.next()
-            prefs.edit().putString(key, parsed.optString(key, "")).apply()
+            when (val value = parsed.opt(key)) {
+                JSONObject.NULL, null -> editor.remove(key)
+                is Boolean -> editor.putBoolean(key, value)
+                is Int -> editor.putInt(key, value)
+                is Long -> editor.putLong(key, value)
+                is Double -> {
+                    if (value % 1.0 == 0.0 && value in Int.MIN_VALUE.toDouble()..Int.MAX_VALUE.toDouble()) {
+                        editor.putInt(key, value.toInt())
+                    } else if (value % 1.0 == 0.0 && value in Long.MIN_VALUE.toDouble()..Long.MAX_VALUE.toDouble()) {
+                        editor.putLong(key, value.toLong())
+                    } else {
+                        editor.putFloat(key, value.toFloat())
+                    }
+                }
+                is JSONArray -> {
+                    val items = mutableSetOf<String>()
+                    for (index in 0 until value.length()) {
+                        items.add(value.optString(index, ""))
+                    }
+                    editor.putStringSet(key, items)
+                }
+                else -> editor.putString(key, value.toString())
+            }
         }
+        editor.apply()
 
         stopSession("Storage imported. Session reset.")
         refreshAuthStatus()
