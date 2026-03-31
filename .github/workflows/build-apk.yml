@@ -8,6 +8,7 @@ jobs:
   build-apk:
     runs-on: ubuntu-24.04
     env:
+      # Use fresh SDK root for build stability
       ANDROID_SDK_ROOT: ${{ github.workspace }}/.android-sdk
       ANDROID_HOME: ${{ github.workspace }}/.android-sdk
 
