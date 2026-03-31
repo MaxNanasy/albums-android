@@ -313,7 +313,8 @@ class MainActivity : AppCompatActivity() {
         if (!response.ok) return
 
         val body = response.body ?: return
-        val contextUri = JSONObject(body).optJSONObject("context")?.optString("uri", null)
+        val context = JSONObject(body).optJSONObject("context")
+        val contextUri = if (context == null || context.isNull("uri")) null else context.optString("uri")
 
         if (contextUri == session.currentUri) {
             session = session.copy(observedCurrentContext = true)
@@ -635,7 +636,7 @@ class MainActivity : AppCompatActivity() {
             activationState = if (queue.isEmpty()) ActivationState.INACTIVE else state,
             queue = queue,
             index = min(parsed.optInt("index", 0), maxOf(queue.size - 1, 0)),
-            currentUri = parsed.optString("currentUri", null),
+            currentUri = if (parsed.isNull("currentUri")) null else parsed.optString("currentUri"),
             observedCurrentContext = parsed.optBoolean("observedCurrentContext", false),
         )
     }
