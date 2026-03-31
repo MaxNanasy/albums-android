@@ -25,15 +25,6 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Pin Android SDK packages
-        run: |
-          mkdir -p "$ANDROID_SDK_ROOT"
-          yes | sdkmanager --licenses >/dev/null
-          sdkmanager --install \
-            "platform-tools" \
-            "platforms;android-35" \
-            "build-tools;35.0.0"
-
       - name: Verify installed SDK platforms
         run: sdkmanager --list_installed | sed -n '/Installed packages:/,$p'
 
