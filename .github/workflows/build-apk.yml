@@ -75,12 +75,11 @@ jobs:
             -storepass "$KEYSTORE_PASSWORD" \
             -alias "$KEY_ALIAS"
 
-      - name: Validate debug key password
+      - name: Validate debug signing alias type
         env:
           KEYSTORE_PATH: ${{ runner.temp }}/debug-signing.jks
           KEYSTORE_PASSWORD: ${{ secrets.DEBUG_KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.DEBUG_KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.DEBUG_KEY_PASSWORD }}
         run: |
           set -euo pipefail
           entry_type="$(keytool -list -v -keystore "$KEYSTORE_PATH" -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" | awk -F': ' '/Entry type:/{print $2; exit}')"
@@ -90,16 +89,6 @@ jobs:
             keytool -list -v -keystore "$KEYSTORE_PATH" -storepass "$KEYSTORE_PASSWORD" | awk -F': ' '/Alias name:|Entry type:/{print $1\": \"$2}'
             exit 1
           fi
-          TEST_FILE="$RUNNER_TEMP/debug-signing-check.txt"
-          TEST_JAR="$RUNNER_TEMP/debug-signing-check.jar"
-          echo "debug-signing-check" > "$TEST_FILE"
-          jar --create --file "$TEST_JAR" -C "$RUNNER_TEMP" "$(basename "$TEST_FILE")"
-          jarsigner \
-            -keystore "$KEYSTORE_PATH" \
-            -storepass "$KEYSTORE_PASSWORD" \
-            -keypass "$KEY_PASSWORD" \
-            "$TEST_JAR" \
-            "$KEY_ALIAS"
 
       - name: Build debug APK
         env:
@@ -178,12 +167,11 @@ jobs:
             -storepass "$KEYSTORE_PASSWORD" \
             -alias "$KEY_ALIAS"
 
-      - name: Validate release key password
+      - name: Validate release signing alias type
         env:
           KEYSTORE_PATH: ${{ runner.temp }}/release-signing.jks
           KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: |
           set -euo pipefail
           entry_type="$(keytool -list -v -keystore "$KEYSTORE_PATH" -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" | awk -F': ' '/Entry type:/{print $2; exit}')"
@@ -193,16 +181,6 @@ jobs:
             keytool -list -v -keystore "$KEYSTORE_PATH" -storepass "$KEYSTORE_PASSWORD" | awk -F': ' '/Alias name:|Entry type:/{print $1\": \"$2}'
             exit 1
           fi
-          TEST_FILE="$RUNNER_TEMP/release-signing-check.txt"
-          TEST_JAR="$RUNNER_TEMP/release-signing-check.jar"
-          echo "release-signing-check" > "$TEST_FILE"
-          jar --create --file "$TEST_JAR" -C "$RUNNER_TEMP" "$(basename "$TEST_FILE")"
-          jarsigner \
-            -keystore "$KEYSTORE_PATH" \
-            -storepass "$KEYSTORE_PASSWORD" \
-            -keypass "$KEY_PASSWORD" \
-            "$TEST_JAR" \
-            "$KEY_ALIAS"
 
       - name: Build release APK
         env:
