@@ -76,6 +76,22 @@ jobs:
             -alias "$KEY_ALIAS" \
             > /dev/null
 
+      - name: Validate debug key password
+        env:
+          KEYSTORE_PATH: ${{ runner.temp }}/debug-signing.jks
+          KEYSTORE_PASSWORD: ${{ secrets.DEBUG_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.DEBUG_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.DEBUG_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          keytool -keypasswd \
+            -keystore "$KEYSTORE_PATH" \
+            -storepass "$KEYSTORE_PASSWORD" \
+            -alias "$KEY_ALIAS" \
+            -keypass "$KEY_PASSWORD" \
+            -new "$KEY_PASSWORD" \
+            > /dev/null
+
       - name: Build debug APK
         env:
           SIGNING_STORE_FILE: ${{ runner.temp }}/debug-signing.jks
@@ -152,6 +168,22 @@ jobs:
             -keystore "$KEYSTORE_PATH" \
             -storepass "$KEYSTORE_PASSWORD" \
             -alias "$KEY_ALIAS" \
+            > /dev/null
+
+      - name: Validate release key password
+        env:
+          KEYSTORE_PATH: ${{ runner.temp }}/release-signing.jks
+          KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          keytool -keypasswd \
+            -keystore "$KEYSTORE_PATH" \
+            -storepass "$KEYSTORE_PASSWORD" \
+            -alias "$KEY_ALIAS" \
+            -keypass "$KEY_PASSWORD" \
+            -new "$KEY_PASSWORD" \
             > /dev/null
 
       - name: Build release APK
