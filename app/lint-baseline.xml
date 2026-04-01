@@ -23,49 +23,9 @@
             column="9"/>
     </issue>
 
-    <issue
-        id="ButtonStyle"
-        message="Buttons in button bars should be borderless; use `style=&quot;?android:attr/buttonBarButtonStyle&quot;` (and `?android:attr/buttonBarStyle` on the parent)"
-        errorLine1="                    &lt;Button"
-        errorLine2="                     ~~~~~~">
-        <location
-            file="src/main/res/layout/activity_main.xml"
-            line="50"
-            column="22"/>
-    </issue>
 
-    <issue
-        id="ButtonStyle"
-        message="Buttons in button bars should be borderless; use `style=&quot;?android:attr/buttonBarButtonStyle&quot;` (and `?android:attr/buttonBarStyle` on the parent)"
-        errorLine1="                    &lt;Button"
-        errorLine2="                     ~~~~~~">
-        <location
-            file="src/main/res/layout/activity_main.xml"
-            line="108"
-            column="22"/>
-    </issue>
 
-    <issue
-        id="ButtonStyle"
-        message="Buttons in button bars should be borderless; use `style=&quot;?android:attr/buttonBarButtonStyle&quot;` (and `?android:attr/buttonBarStyle` on the parent)"
-        errorLine1="                    &lt;Button"
-        errorLine2="                     ~~~~~~">
-        <location
-            file="src/main/res/layout/activity_main.xml"
-            line="157"
-            column="22"/>
-    </issue>
 
-    <issue
-        id="ButtonStyle"
-        message="Buttons in button bars should be borderless; use `style=&quot;?android:attr/buttonBarButtonStyle&quot;` (and `?android:attr/buttonBarStyle` on the parent)"
-        errorLine1="                    &lt;Button"
-        errorLine2="                     ~~~~~~">
-        <location
-            file="src/main/res/layout/activity_main.xml"
-            line="227"
-            column="22"/>
-    </issue>
 
     <issue
         id="TextFields"
