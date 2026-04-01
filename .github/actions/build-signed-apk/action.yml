@@ -1,0 +1,132 @@
+name: Build Signed APK
+
+description: Validate signing inputs, build an APK variant, and upload it as an artifact.
+
+inputs:
+  variant:
+    description: APK variant to build (debug or release)
+    required: true
+  keystore_base64:
+    description: Base64-encoded signing keystore content
+    required: true
+  keystore_password:
+    description: Keystore password
+    required: true
+  key_alias:
+    description: Signing key alias
+    required: true
+  key_password:
+    description: Signing key password (optional for PKCS12 keystores)
+    required: false
+    default: ''
+  artifact_name:
+    description: Uploaded artifact name
+    required: true
+  artifact_path:
+    description: Glob/path for APK artifact upload
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Validate required signing inputs
+      shell: bash
+      env:
+        INPUT_VARIANT: ${{ inputs.variant }}
+        INPUT_KEYSTORE_BASE64: ${{ inputs.keystore_base64 }}
+        INPUT_KEYSTORE_PASSWORD: ${{ inputs.keystore_password }}
+        INPUT_KEY_ALIAS: ${{ inputs.key_alias }}
+        INPUT_ARTIFACT_NAME: ${{ inputs.artifact_name }}
+        INPUT_ARTIFACT_PATH: ${{ inputs.artifact_path }}
+      run: |
+        set -euo pipefail
+
+        if [ "$INPUT_VARIANT" != "debug" ] && [ "$INPUT_VARIANT" != "release" ]; then
+          echo "Input 'variant' must be either 'debug' or 'release'."
+          exit 1
+        fi
+
+        for required_input in INPUT_KEYSTORE_BASE64 INPUT_KEYSTORE_PASSWORD INPUT_KEY_ALIAS INPUT_ARTIFACT_NAME INPUT_ARTIFACT_PATH; do
+          if [ -z "${!required_input}" ]; then
+            echo "Missing required input: ${required_input#INPUT_}"
+            exit 1
+          fi
+        done
+
+    - name: Decode keystore
+      shell: bash
+      env:
+        KEYSTORE_BASE64: ${{ inputs.keystore_base64 }}
+        KEYSTORE_PATH: ${{ runner.temp }}/${{ inputs.variant }}-signing.jks
+      run: |
+        set -euo pipefail
+        printf %s "$KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
+
+    - name: Validate keystore alias exists
+      shell: bash
+      env:
+        KEYSTORE_PATH: ${{ runner.temp }}/${{ inputs.variant }}-signing.jks
+        KEYSTORE_PASSWORD: ${{ inputs.keystore_password }}
+        KEY_ALIAS: ${{ inputs.key_alias }}
+      run: |
+        set -euo pipefail
+        keytool -list \
+          -keystore "$KEYSTORE_PATH" \
+          -storepass "$KEYSTORE_PASSWORD" \
+          -alias "$KEY_ALIAS"
+
+    - name: Validate alias type is PrivateKeyEntry
+      shell: bash
+      env:
+        KEYSTORE_PATH: ${{ runner.temp }}/${{ inputs.variant }}-signing.jks
+        KEYSTORE_PASSWORD: ${{ inputs.keystore_password }}
+        KEY_ALIAS: ${{ inputs.key_alias }}
+      run: |
+        set -euo pipefail
+        entry_type="$(keytool -list -v -keystore "$KEYSTORE_PATH" -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" | awk -F': ' '/Entry type:/{print $2; exit}')"
+        if [ "$entry_type" != "PrivateKeyEntry" ]; then
+          echo "Alias '$KEY_ALIAS' is '$entry_type', but APK signing requires a PrivateKeyEntry."
+          echo "Available aliases in keystore:"
+          keytool -list -v -keystore "$KEYSTORE_PATH" -storepass "$KEYSTORE_PASSWORD" | awk -F': ' '/Alias name:|Entry type:/{print $1\": \"$2}'
+          exit 1
+        fi
+
+    - name: Resolve key password for keystore type
+      shell: bash
+      env:
+        KEYSTORE_PATH: ${{ runner.temp }}/${{ inputs.variant }}-signing.jks
+        KEYSTORE_PASSWORD: ${{ inputs.keystore_password }}
+        KEY_PASSWORD: ${{ inputs.key_password }}
+      run: |
+        set -euo pipefail
+        keystore_type="$(keytool -list -keystore "$KEYSTORE_PATH" -storepass "$KEYSTORE_PASSWORD" | awk -F': ' '/Keystore type:/{print $2; exit}')"
+        if [ "$keystore_type" = "PKCS12" ]; then
+          echo "Using keystore password as key password for PKCS12 keystore."
+          echo "EFFECTIVE_SIGNING_KEY_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+        else
+          if [ -z "$KEY_PASSWORD" ]; then
+            echo "Input 'key_password' is required for non-PKCS12 keystores."
+            exit 1
+          fi
+          echo "EFFECTIVE_SIGNING_KEY_PASSWORD=$KEY_PASSWORD" >> "$GITHUB_ENV"
+        fi
+
+    - name: Build APK
+      shell: bash
+      env:
+        SIGNING_STORE_FILE: ${{ runner.temp }}/${{ inputs.variant }}-signing.jks
+        SIGNING_STORE_PASSWORD: ${{ inputs.keystore_password }}
+        SIGNING_KEY_ALIAS: ${{ inputs.key_alias }}
+        SIGNING_KEY_PASSWORD: ${{ env.EFFECTIVE_SIGNING_KEY_PASSWORD }}
+      run: |
+        set -euo pipefail
+        variant_capitalized="${{ inputs.variant }}"
+        variant_capitalized="${variant_capitalized^}"
+        ./gradlew --no-daemon "assemble${variant_capitalized}"
+
+    - name: Upload APK artifact
+      uses: actions/upload-artifact@v6
+      with:
+        name: ${{ inputs.artifact_name }}
+        path: ${{ inputs.artifact_path }}
+        retention-days: 1
