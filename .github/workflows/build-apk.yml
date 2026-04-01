@@ -83,6 +83,13 @@ jobs:
           KEY_PASSWORD: ${{ secrets.DEBUG_KEY_PASSWORD }}
         run: |
           set -euo pipefail
+          entry_type="$(keytool -list -v -keystore "$KEYSTORE_PATH" -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" | awk -F': ' '/Entry type:/{print $2; exit}')"
+          if [ "$entry_type" != "PrivateKeyEntry" ]; then
+            echo "Alias '$KEY_ALIAS' is '$entry_type', but APK signing requires a PrivateKeyEntry."
+            echo "Available aliases in keystore:"
+            keytool -list -v -keystore "$KEYSTORE_PATH" -storepass "$KEYSTORE_PASSWORD" | awk -F': ' '/Alias name:|Entry type:/{print $1\": \"$2}'
+            exit 1
+          fi
           TEST_FILE="$RUNNER_TEMP/debug-signing-check.txt"
           TEST_JAR="$RUNNER_TEMP/debug-signing-check.jar"
           echo "debug-signing-check" > "$TEST_FILE"
@@ -179,6 +186,13 @@ jobs:
           KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: |
           set -euo pipefail
+          entry_type="$(keytool -list -v -keystore "$KEYSTORE_PATH" -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" | awk -F': ' '/Entry type:/{print $2; exit}')"
+          if [ "$entry_type" != "PrivateKeyEntry" ]; then
+            echo "Alias '$KEY_ALIAS' is '$entry_type', but APK signing requires a PrivateKeyEntry."
+            echo "Available aliases in keystore:"
+            keytool -list -v -keystore "$KEYSTORE_PATH" -storepass "$KEYSTORE_PASSWORD" | awk -F': ' '/Alias name:|Entry type:/{print $1\": \"$2}'
+            exit 1
+          fi
           TEST_FILE="$RUNNER_TEMP/release-signing-check.txt"
           TEST_JAR="$RUNNER_TEMP/release-signing-check.jar"
           echo "release-signing-check" > "$TEST_FILE"
