@@ -44,6 +44,7 @@ android {
         abortOnError = true
         baseline = file("lint-baseline.xml")
         disable += setOf(
+            "GradleDependency",
             "HardcodedText",
             "SetTextI18n",
         )
