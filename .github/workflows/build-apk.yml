@@ -73,8 +73,7 @@ jobs:
           keytool -list \
             -keystore "$KEYSTORE_PATH" \
             -storepass "$KEYSTORE_PASSWORD" \
-            -alias "$KEY_ALIAS" \
-            > /dev/null
+            -alias "$KEY_ALIAS"
 
       - name: Validate debug key password
         env:
@@ -89,8 +88,7 @@ jobs:
             -storepass "$KEYSTORE_PASSWORD" \
             -alias "$KEY_ALIAS" \
             -keypass "$KEY_PASSWORD" \
-            -new "$KEY_PASSWORD" \
-            > /dev/null
+            -new "$KEY_PASSWORD"
 
       - name: Build debug APK
         env:
@@ -167,8 +165,7 @@ jobs:
           keytool -list \
             -keystore "$KEYSTORE_PATH" \
             -storepass "$KEYSTORE_PASSWORD" \
-            -alias "$KEY_ALIAS" \
-            > /dev/null
+            -alias "$KEY_ALIAS"
 
       - name: Validate release key password
         env:
@@ -183,8 +180,7 @@ jobs:
             -storepass "$KEYSTORE_PASSWORD" \
             -alias "$KEY_ALIAS" \
             -keypass "$KEY_PASSWORD" \
-            -new "$KEY_PASSWORD" \
-            > /dev/null
+            -new "$KEY_PASSWORD"
 
       - name: Build release APK
         env:
