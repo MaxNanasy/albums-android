@@ -16,12 +16,40 @@ on:
           - release
 
 jobs:
-  debug-build:
-    # Route debug builds to non-main pushes, or manual runs that explicitly choose debug.
-    if: >-
-      (github.event_name == 'push' && github.ref != 'refs/heads/main') ||
-      (github.event_name == 'workflow_dispatch' && inputs.build_type == 'debug')
+  build:
     runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        include:
+          - variant: debug
+            secret_prefix: DEBUG
+            artifact_glob: app/build/outputs/apk/debug/*.apk
+            gradle_task: assembleDebug
+            run_on_non_main_push: true
+            run_on_main_push: false
+            manual_build_type: debug
+            manual_requires_main: false
+          - variant: release
+            secret_prefix: RELEASE
+            artifact_glob: app/build/outputs/apk/release/*.apk
+            gradle_task: assembleRelease
+            run_on_non_main_push: false
+            run_on_main_push: true
+            manual_build_type: release
+            manual_requires_main: true
+    if: >-
+      (
+        github.event_name == 'push' &&
+        (
+          (matrix.run_on_non_main_push && github.ref != 'refs/heads/main') ||
+          (matrix.run_on_main_push && github.ref == 'refs/heads/main')
+        )
+      ) ||
+      (
+        github.event_name == 'workflow_dispatch' &&
+        inputs.build_type == matrix.manual_build_type &&
+        (!matrix.manual_requires_main || github.ref == 'refs/heads/main')
+      )
     env:
       # Use fresh SDK root for build stability
       ANDROID_SDK_ROOT: ${{ github.workspace }}/.android-sdk
@@ -41,194 +69,73 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Validate debug signing secrets
+      - name: Sign and build ${{ matrix.variant }} APK
         env:
+          VARIANT: ${{ matrix.variant }}
+          SECRET_PREFIX: ${{ matrix.secret_prefix }}
+          GRADLE_TASK: ${{ matrix.gradle_task }}
           DEBUG_KEYSTORE_BASE64: ${{ secrets.DEBUG_KEYSTORE_BASE64 }}
           DEBUG_KEYSTORE_PASSWORD: ${{ secrets.DEBUG_KEYSTORE_PASSWORD }}
           DEBUG_KEY_ALIAS: ${{ secrets.DEBUG_KEY_ALIAS }}
-        run: |
-          set -euo pipefail
-          for required_secret in DEBUG_KEYSTORE_BASE64 DEBUG_KEYSTORE_PASSWORD DEBUG_KEY_ALIAS; do
-            if [ -z "${!required_secret}" ]; then
-              echo "Missing required secret: ${required_secret}"
-              exit 1
-            fi
-          done
-
-      - name: Decode debug keystore
-        env:
-          KEYSTORE_BASE64: ${{ secrets.DEBUG_KEYSTORE_BASE64 }}
-        run: |
-          set -euo pipefail
-          printf %s "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/debug-signing.jks"
-
-      - name: Validate debug keystore entry
-        env:
-          KEYSTORE_PATH: ${{ runner.temp }}/debug-signing.jks
-          KEYSTORE_PASSWORD: ${{ secrets.DEBUG_KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.DEBUG_KEY_ALIAS }}
-        run: |
-          set -euo pipefail
-          keytool -list \
-            -keystore "$KEYSTORE_PATH" \
-            -storepass "$KEYSTORE_PASSWORD" \
-            -alias "$KEY_ALIAS"
-
-      - name: Validate debug signing alias type
-        env:
-          KEYSTORE_PATH: ${{ runner.temp }}/debug-signing.jks
-          KEYSTORE_PASSWORD: ${{ secrets.DEBUG_KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.DEBUG_KEY_ALIAS }}
-        run: |
-          set -euo pipefail
-          entry_type="$(keytool -list -v -keystore "$KEYSTORE_PATH" -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" | awk -F': ' '/Entry type:/{print $2; exit}')"
-          if [ "$entry_type" != "PrivateKeyEntry" ]; then
-            echo "Alias '$KEY_ALIAS' is '$entry_type', but APK signing requires a PrivateKeyEntry."
-            echo "Available aliases in keystore:"
-            keytool -list -v -keystore "$KEYSTORE_PATH" -storepass "$KEYSTORE_PASSWORD" | awk -F': ' '/Alias name:|Entry type:/{print $1\": \"$2}'
-            exit 1
-          fi
-
-      - name: Resolve debug key password for keystore type
-        env:
-          KEYSTORE_PATH: ${{ runner.temp }}/debug-signing.jks
-          KEYSTORE_PASSWORD: ${{ secrets.DEBUG_KEYSTORE_PASSWORD }}
-          KEY_PASSWORD: ${{ secrets.DEBUG_KEY_PASSWORD }}
-        run: |
-          set -euo pipefail
-          keystore_type="$(keytool -list -keystore "$KEYSTORE_PATH" -storepass "$KEYSTORE_PASSWORD" | awk -F': ' '/Keystore type:/{print $2; exit}')"
-          if [ "$keystore_type" = "PKCS12" ]; then
-            echo "Using keystore password as key password for PKCS12 keystore."
-            echo "EFFECTIVE_SIGNING_KEY_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
-          else
-            if [ -z "$KEY_PASSWORD" ]; then
-              echo "DEBUG_KEY_PASSWORD is required for non-PKCS12 keystores."
-              exit 1
-            fi
-            echo "EFFECTIVE_SIGNING_KEY_PASSWORD=$KEY_PASSWORD" >> "$GITHUB_ENV"
-          fi
-
-      - name: Build debug APK
-        env:
-          SIGNING_STORE_FILE: ${{ runner.temp }}/debug-signing.jks
-          SIGNING_STORE_PASSWORD: ${{ secrets.DEBUG_KEYSTORE_PASSWORD }}
-          SIGNING_KEY_ALIAS: ${{ secrets.DEBUG_KEY_ALIAS }}
-          SIGNING_KEY_PASSWORD: ${{ env.EFFECTIVE_SIGNING_KEY_PASSWORD }}
-        run: ./gradlew --no-daemon assembleDebug
-
-      - name: Upload APK artifact
-        uses: actions/upload-artifact@v6
-        with:
-          name: app-debug-apk-${{ github.run_id }}
-          path: app/build/outputs/apk/debug/*.apk
-          retention-days: 1
-
-  release-build:
-    # Route release builds to main pushes, or manual runs that choose release on the main branch only.
-    if: >-
-      github.ref == 'refs/heads/main' &&
-      (
-        (github.event_name == 'push') ||
-        (github.event_name == 'workflow_dispatch' && inputs.build_type == 'release')
-      )
-    runs-on: ubuntu-24.04
-    env:
-      # Use fresh SDK root for build stability
-      ANDROID_SDK_ROOT: ${{ github.workspace }}/.android-sdk
-      ANDROID_HOME: ${{ github.workspace }}/.android-sdk
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-
-      - name: Set up JDK
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: '17'
-          cache: gradle
-
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Validate release signing secrets
-        env:
+          DEBUG_KEY_PASSWORD: ${{ secrets.DEBUG_KEY_PASSWORD }}
           RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
           RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
           RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          for required_secret in RELEASE_KEYSTORE_BASE64 RELEASE_KEYSTORE_PASSWORD RELEASE_KEY_ALIAS; do
-            if [ -z "${!required_secret}" ]; then
+
+          for required_suffix in KEYSTORE_BASE64 KEYSTORE_PASSWORD KEY_ALIAS; do
+            required_secret="${SECRET_PREFIX}_${required_suffix}"
+            if [ -z "${!required_secret:-}" ]; then
               echo "Missing required secret: ${required_secret}"
               exit 1
             fi
           done
 
-      - name: Decode release keystore
-        env:
-          KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
-        run: |
-          set -euo pipefail
-          printf %s "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release-signing.jks"
+          keystore_base64_var="${SECRET_PREFIX}_KEYSTORE_BASE64"
+          keystore_password_var="${SECRET_PREFIX}_KEYSTORE_PASSWORD"
+          key_alias_var="${SECRET_PREFIX}_KEY_ALIAS"
+          key_password_var="${SECRET_PREFIX}_KEY_PASSWORD"
 
-      - name: Validate release keystore entry
-        env:
-          KEYSTORE_PATH: ${{ runner.temp }}/release-signing.jks
-          KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
-        run: |
-          set -euo pipefail
+          KEYSTORE_PATH="$RUNNER_TEMP/${VARIANT}-signing.jks"
+          printf %s "${!keystore_base64_var}" | base64 --decode > "$KEYSTORE_PATH"
+
           keytool -list \
             -keystore "$KEYSTORE_PATH" \
-            -storepass "$KEYSTORE_PASSWORD" \
-            -alias "$KEY_ALIAS"
+            -storepass "${!keystore_password_var}" \
+            -alias "${!key_alias_var}"
 
-      - name: Validate release signing alias type
-        env:
-          KEYSTORE_PATH: ${{ runner.temp }}/release-signing.jks
-          KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
-        run: |
-          set -euo pipefail
-          entry_type="$(keytool -list -v -keystore "$KEYSTORE_PATH" -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" | awk -F': ' '/Entry type:/{print $2; exit}')"
+          entry_type="$(keytool -list -v -keystore "$KEYSTORE_PATH" -storepass "${!keystore_password_var}" -alias "${!key_alias_var}" | awk -F': ' '/Entry type:/{print $2; exit}')"
           if [ "$entry_type" != "PrivateKeyEntry" ]; then
-            echo "Alias '$KEY_ALIAS' is '$entry_type', but APK signing requires a PrivateKeyEntry."
+            echo "Alias '${!key_alias_var}' is '$entry_type', but APK signing requires a PrivateKeyEntry."
             echo "Available aliases in keystore:"
-            keytool -list -v -keystore "$KEYSTORE_PATH" -storepass "$KEYSTORE_PASSWORD" | awk -F': ' '/Alias name:|Entry type:/{print $1\": \"$2}'
+            keytool -list -v -keystore "$KEYSTORE_PATH" -storepass "${!keystore_password_var}" | awk -F': ' '/Alias name:|Entry type:/{print $1\": \"$2}'
             exit 1
           fi
 
-      - name: Resolve release key password for keystore type
-        env:
-          KEYSTORE_PATH: ${{ runner.temp }}/release-signing.jks
-          KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
-          KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
-        run: |
-          set -euo pipefail
-          keystore_type="$(keytool -list -keystore "$KEYSTORE_PATH" -storepass "$KEYSTORE_PASSWORD" | awk -F': ' '/Keystore type:/{print $2; exit}')"
+          keystore_type="$(keytool -list -keystore "$KEYSTORE_PATH" -storepass "${!keystore_password_var}" | awk -F': ' '/Keystore type:/{print $2; exit}')"
           if [ "$keystore_type" = "PKCS12" ]; then
             echo "Using keystore password as key password for PKCS12 keystore."
-            echo "EFFECTIVE_SIGNING_KEY_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+            EFFECTIVE_SIGNING_KEY_PASSWORD="${!keystore_password_var}"
           else
-            if [ -z "$KEY_PASSWORD" ]; then
-              echo "RELEASE_KEY_PASSWORD is required for non-PKCS12 keystores."
+            if [ -z "${!key_password_var:-}" ]; then
+              echo "${key_password_var} is required for non-PKCS12 keystores."
               exit 1
             fi
-            echo "EFFECTIVE_SIGNING_KEY_PASSWORD=$KEY_PASSWORD" >> "$GITHUB_ENV"
+            EFFECTIVE_SIGNING_KEY_PASSWORD="${!key_password_var}"
           fi
 
-      - name: Build release APK
-        env:
-          SIGNING_STORE_FILE: ${{ runner.temp }}/release-signing.jks
-          SIGNING_STORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
-          SIGNING_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
-          SIGNING_KEY_PASSWORD: ${{ env.EFFECTIVE_SIGNING_KEY_PASSWORD }}
-        run: ./gradlew --no-daemon assembleRelease
+          SIGNING_STORE_FILE="$KEYSTORE_PATH" \
+          SIGNING_STORE_PASSWORD="${!keystore_password_var}" \
+          SIGNING_KEY_ALIAS="${!key_alias_var}" \
+          SIGNING_KEY_PASSWORD="$EFFECTIVE_SIGNING_KEY_PASSWORD" \
+          ./gradlew --no-daemon "$GRADLE_TASK"
 
       - name: Upload APK artifact
+        if: success()
         uses: actions/upload-artifact@v6
         with:
-          name: app-release-apk-${{ github.run_id }}
-          path: app/build/outputs/apk/release/*.apk
+          name: app-${{ matrix.variant }}-apk-${{ github.run_id }}
+          path: ${{ matrix.artifact_glob }}
           retention-days: 1
