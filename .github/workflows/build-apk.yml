@@ -83,12 +83,16 @@ jobs:
           KEY_PASSWORD: ${{ secrets.DEBUG_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          keytool -keypasswd \
+          TEST_FILE="$RUNNER_TEMP/debug-signing-check.txt"
+          TEST_JAR="$RUNNER_TEMP/debug-signing-check.jar"
+          echo "debug-signing-check" > "$TEST_FILE"
+          jar --create --file "$TEST_JAR" -C "$RUNNER_TEMP" "$(basename "$TEST_FILE")"
+          jarsigner \
             -keystore "$KEYSTORE_PATH" \
             -storepass "$KEYSTORE_PASSWORD" \
-            -alias "$KEY_ALIAS" \
             -keypass "$KEY_PASSWORD" \
-            -new "$KEY_PASSWORD"
+            "$TEST_JAR" \
+            "$KEY_ALIAS"
 
       - name: Build debug APK
         env:
@@ -175,12 +179,16 @@ jobs:
           KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          keytool -keypasswd \
+          TEST_FILE="$RUNNER_TEMP/release-signing-check.txt"
+          TEST_JAR="$RUNNER_TEMP/release-signing-check.jar"
+          echo "release-signing-check" > "$TEST_FILE"
+          jar --create --file "$TEST_JAR" -C "$RUNNER_TEMP" "$(basename "$TEST_FILE")"
+          jarsigner \
             -keystore "$KEYSTORE_PATH" \
             -storepass "$KEYSTORE_PASSWORD" \
-            -alias "$KEY_ALIAS" \
             -keypass "$KEY_PASSWORD" \
-            -new "$KEY_PASSWORD"
+            "$TEST_JAR" \
+            "$KEY_ALIAS"
 
       - name: Build release APK
         env:
