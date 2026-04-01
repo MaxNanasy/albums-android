@@ -37,19 +37,7 @@ jobs:
             run_on_main_push: true
             manual_build_type: release
             manual_requires_main: true
-    if: >-
-      (
-        github.event_name == 'push' &&
-        (
-          (matrix.run_on_non_main_push && github.ref != 'refs/heads/main') ||
-          (matrix.run_on_main_push && github.ref == 'refs/heads/main')
-        )
-      ) ||
-      (
-        github.event_name == 'workflow_dispatch' &&
-        inputs.build_type == matrix.manual_build_type &&
-        (!matrix.manual_requires_main || github.ref == 'refs/heads/main')
-      )
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     env:
       # Use fresh SDK root for build stability
       ANDROID_SDK_ROOT: ${{ github.workspace }}/.android-sdk
@@ -57,9 +45,35 @@ jobs:
 
     steps:
       - name: Checkout
+        if: >-
+          (
+            github.event_name == 'push' &&
+            (
+              (matrix.run_on_non_main_push && github.ref != 'refs/heads/main') ||
+              (matrix.run_on_main_push && github.ref == 'refs/heads/main')
+            )
+          ) ||
+          (
+            github.event_name == 'workflow_dispatch' &&
+            inputs.build_type == matrix.manual_build_type &&
+            (!matrix.manual_requires_main || github.ref == 'refs/heads/main')
+          )
         uses: actions/checkout@v5
 
       - name: Set up JDK
+        if: >-
+          (
+            github.event_name == 'push' &&
+            (
+              (matrix.run_on_non_main_push && github.ref != 'refs/heads/main') ||
+              (matrix.run_on_main_push && github.ref == 'refs/heads/main')
+            )
+          ) ||
+          (
+            github.event_name == 'workflow_dispatch' &&
+            inputs.build_type == matrix.manual_build_type &&
+            (!matrix.manual_requires_main || github.ref == 'refs/heads/main')
+          )
         uses: actions/setup-java@v5
         with:
           distribution: temurin
@@ -67,9 +81,35 @@ jobs:
           cache: gradle
 
       - name: Set up Android SDK
+        if: >-
+          (
+            github.event_name == 'push' &&
+            (
+              (matrix.run_on_non_main_push && github.ref != 'refs/heads/main') ||
+              (matrix.run_on_main_push && github.ref == 'refs/heads/main')
+            )
+          ) ||
+          (
+            github.event_name == 'workflow_dispatch' &&
+            inputs.build_type == matrix.manual_build_type &&
+            (!matrix.manual_requires_main || github.ref == 'refs/heads/main')
+          )
         uses: android-actions/setup-android@v3
 
       - name: Sign and build ${{ matrix.variant }} APK
+        if: >-
+          (
+            github.event_name == 'push' &&
+            (
+              (matrix.run_on_non_main_push && github.ref != 'refs/heads/main') ||
+              (matrix.run_on_main_push && github.ref == 'refs/heads/main')
+            )
+          ) ||
+          (
+            github.event_name == 'workflow_dispatch' &&
+            inputs.build_type == matrix.manual_build_type &&
+            (!matrix.manual_requires_main || github.ref == 'refs/heads/main')
+          )
         env:
           VARIANT: ${{ matrix.variant }}
           SECRET_PREFIX: ${{ matrix.secret_prefix }}
@@ -133,7 +173,22 @@ jobs:
           ./gradlew --no-daemon "$GRADLE_TASK"
 
       - name: Upload APK artifact
-        if: success()
+        if: >-
+          success() &&
+          (
+            (
+              github.event_name == 'push' &&
+              (
+                (matrix.run_on_non_main_push && github.ref != 'refs/heads/main') ||
+                (matrix.run_on_main_push && github.ref == 'refs/heads/main')
+              )
+            ) ||
+            (
+              github.event_name == 'workflow_dispatch' &&
+              inputs.build_type == matrix.manual_build_type &&
+              (!matrix.manual_requires_main || github.ref == 'refs/heads/main')
+            )
+          )
         uses: actions/upload-artifact@v6
         with:
           name: app-${{ matrix.variant }}-apk-${{ github.run_id }}
