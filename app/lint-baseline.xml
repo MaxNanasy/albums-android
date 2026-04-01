@@ -23,19 +23,4 @@
             column="9"/>
     </issue>
 
-
-
-
-
-    <issue
-        id="TextFields"
-        message="This text field does not specify an `inputType`"
-        errorLine1="                &lt;EditText"
-        errorLine2="                 ~~~~~~~~">
-        <location
-            file="src/main/res/layout/activity_main.xml"
-            line="94"
-            column="18"/>
-    </issue>
-
 </issues>

@@ -8,6 +8,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.Base64
+import android.view.inputmethod.EditorInfo
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -133,6 +134,14 @@ class MainActivity : AppCompatActivity() {
             toast("Disconnected from Spotify.")
         }
         addButton.setOnClickListener { appScope.launch { addItem() } }
+        itemUriInput.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == EditorInfo.IME_ACTION_DONE) {
+                addButton.performClick()
+                true
+            } else {
+                false
+            }
+        }
         importPlaylistButton.setOnClickListener { appScope.launch { importAlbumsFromPlaylist() } }
         startButton.setOnClickListener { appScope.launch { startShuffleSession() } }
         reattachButton.setOnClickListener { appScope.launch { reattachSession() } }
