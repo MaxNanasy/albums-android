@@ -76,6 +76,14 @@ jobs:
           echo "KEY_ALIAS=$resolved_key_alias" >> "$GITHUB_ENV"
           echo "KEY_PASSWORD=$resolved_key_password" >> "$GITHUB_ENV"
 
+          if [ -n "$resolved_key_password" ]; then
+            echo "Using $resolved_key_password_var for EFFECTIVE_SIGNING_KEY_PASSWORD."
+            echo "EFFECTIVE_SIGNING_KEY_PASSWORD=$resolved_key_password" >> "$GITHUB_ENV"
+          else
+            echo "$resolved_key_password_var not set. Using $resolved_keystore_password_var for EFFECTIVE_SIGNING_KEY_PASSWORD."
+            echo "EFFECTIVE_SIGNING_KEY_PASSWORD=$resolved_keystore_password" >> "$GITHUB_ENV"
+          fi
+
       - name: Checkout
         uses: actions/checkout@v5
 
@@ -99,15 +107,6 @@ jobs:
         run: |
           set -euo pipefail
           printf %s "$KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
-
-          variant_upper="$(printf '%s' "$VARIANT" | tr '[:lower:]' '[:upper:]')"
-          if [ -n "$KEY_PASSWORD" ]; then
-            echo "Using ${variant_upper}_KEY_PASSWORD for EFFECTIVE_SIGNING_KEY_PASSWORD."
-            echo "EFFECTIVE_SIGNING_KEY_PASSWORD=$KEY_PASSWORD" >> "$GITHUB_ENV"
-          else
-            echo "${variant_upper}_KEY_PASSWORD not set. Using ${variant_upper}_KEYSTORE_PASSWORD for EFFECTIVE_SIGNING_KEY_PASSWORD."
-            echo "EFFECTIVE_SIGNING_KEY_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
-          fi
 
       - name: Build APK
         env:
