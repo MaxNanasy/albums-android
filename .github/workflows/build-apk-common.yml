@@ -101,10 +101,10 @@ jobs:
           printf %s "$KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
 
           if [ -n "$KEY_PASSWORD" ]; then
-            echo "Using provided key password."
+            echo "Using KEY_PASSWORD for EFFECTIVE_SIGNING_KEY_PASSWORD."
             echo "EFFECTIVE_SIGNING_KEY_PASSWORD=$KEY_PASSWORD" >> "$GITHUB_ENV"
           else
-            echo "KEY_PASSWORD not set. Falling back to keystore password."
+            echo "KEY_PASSWORD not set. Using KEYSTORE_PASSWORD for EFFECTIVE_SIGNING_KEY_PASSWORD."
             echo "EFFECTIVE_SIGNING_KEY_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
           fi
 
