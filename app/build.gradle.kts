@@ -75,6 +75,7 @@ tasks.withType<KotlinCompile>().configureEach {
 }
 
 tasks.withType<JavaCompile>().configureEach {
+    options.compilerArgs.add("-Xlint:all")
     options.compilerArgs.add("-Werror")
 }
 
