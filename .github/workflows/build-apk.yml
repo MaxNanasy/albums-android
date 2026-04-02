@@ -2,36 +2,39 @@ name: Build APK
 
 on:
   push:
+    branches:
+      - '**'
   workflow_dispatch:
+    inputs:
+      build_type:
+        description: APK build variant to run
+        required: true
+        default: debug
+        type: choice
+        options:
+          - debug
+          - release
 
 jobs:
-  build-apk:
-    runs-on: ubuntu-24.04
-    env:
-      # Use fresh SDK root for build stability
-      ANDROID_SDK_ROOT: ${{ github.workspace }}/.android-sdk
-      ANDROID_HOME: ${{ github.workspace }}/.android-sdk
+  debug-build:
+    # Do debug builds for non-migrate-from-webapp pushes, or manual runs that explicitly choose debug.
+    if: >-
+      (github.event_name == 'push' && github.ref != 'refs/heads/migrate-from-webapp') ||
+      (github.event_name == 'workflow_dispatch' && inputs.build_type == 'debug')
+    uses: ./.github/workflows/build-apk-common.yml
+    with:
+      variant: debug
+    secrets: inherit
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-
-      - name: Set up JDK
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: '17'
-          cache: gradle
-
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Build debug APK
-        run: ./gradlew --no-daemon assembleDebug
-
-      - name: Upload APK artifact
-        uses: actions/upload-artifact@v6
-        with:
-          name: app-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
-          retention-days: 1
+  release-build:
+    # Do release builds for migrate-from-webapp pushes, or manual runs that choose release on the migrate-from-webapp branch only.
+    if: >-
+      github.ref == 'refs/heads/migrate-from-webapp' &&
+      (
+        (github.event_name == 'push') ||
+        (github.event_name == 'workflow_dispatch' && inputs.build_type == 'release')
+      )
+    uses: ./.github/workflows/build-apk-common.yml
+    with:
+      variant: release
+    secrets: inherit

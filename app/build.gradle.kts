@@ -15,13 +15,29 @@ android {
         minSdk = 26
         targetSdk = 35
         versionCode = 1
-        versionName = "0.0.0"
+        versionName =
+            providers.gradleProperty("appVersionName")
+                .orElse("0.0.0")
+                .get()
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        create("env") {
+            storeFile = System.getenv("SIGNING_STORE_FILE")?.let(::file)
+            storePassword = System.getenv("SIGNING_STORE_PASSWORD")
+            keyAlias = System.getenv("SIGNING_KEY_ALIAS")
+            keyPassword = System.getenv("SIGNING_KEY_PASSWORD")
+        }
+    }
+
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("env")
+        }
         release {
+            signingConfig = signingConfigs.getByName("env")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
