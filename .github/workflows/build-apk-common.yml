@@ -100,8 +100,8 @@ jobs:
         run: |
           set -euo pipefail
           printf %s "$KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
-          variant_upper="$(printf '%s' "$VARIANT" | tr '[:lower:]' '[:upper:]')"
 
+          variant_upper="$(printf '%s' "$VARIANT" | tr '[:lower:]' '[:upper:]')"
           if [ -n "$KEY_PASSWORD" ]; then
             echo "Using ${variant_upper}_KEY_PASSWORD for EFFECTIVE_SIGNING_KEY_PASSWORD."
             echo "EFFECTIVE_SIGNING_KEY_PASSWORD=$KEY_PASSWORD" >> "$GITHUB_ENV"
