@@ -40,8 +40,8 @@ jobs:
 
           echo "KEYSTORE_FILENAME=${VARIANT}-signing.jks" >> "$GITHUB_ENV"
           echo "GRADLE_TASK=assemble${variant_capitalized}" >> "$GITHUB_ENV"
-          echo "ARTIFACT_NAME=app-${VARIANT}-apk-${RUN_ID}" >> "$GITHUB_ENV"
-          echo "ARTIFACT_PATH=app/build/outputs/apk/${VARIANT}/*.apk" >> "$GITHUB_ENV"
+          echo "APK_FILENAME=app-${VARIANT}-${RUN_ID}.apk" >> "$GITHUB_ENV"
+          echo "ARTIFACT_NAME=app-${VARIANT}-${RUN_ID}" >> "$GITHUB_ENV"
 
           variant_upper="$(printf '%s' "$VARIANT" | tr '[:lower:]' '[:upper:]')"
 
@@ -116,7 +116,23 @@ jobs:
           SIGNING_STORE_PASSWORD: ${{ env.KEYSTORE_PASSWORD }}
           SIGNING_KEY_ALIAS: ${{ env.KEY_ALIAS }}
           SIGNING_KEY_PASSWORD: ${{ env.EFFECTIVE_SIGNING_KEY_PASSWORD }}
-        run: ./gradlew --no-daemon ${{ env.GRADLE_TASK }}
+          APP_VERSION_NAME: ${{ github.run_id }}
+        run: ./gradlew --no-daemon -PappVersionName="${APP_VERSION_NAME}" ${{ env.GRADLE_TASK }}
+
+      - name: Prepare APK artifact payload
+        env:
+          VARIANT: ${{ inputs.variant }}
+          APK_FILENAME: ${{ env.APK_FILENAME }}
+        run: |
+          set -euo pipefail
+          source_apk="$(find "app/build/outputs/apk/${VARIANT}" -maxdepth 1 -type f -name '*.apk' | head -n 1)"
+          if [ -z "$source_apk" ]; then
+            echo "No APK found for variant ${VARIANT}."
+            exit 1
+          fi
+
+          cp "$source_apk" "${RUNNER_TEMP}/${APK_FILENAME}"
+          echo "ARTIFACT_PATH=${RUNNER_TEMP}/${APK_FILENAME}" >> "$GITHUB_ENV"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v6
