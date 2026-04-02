@@ -37,13 +37,12 @@ jobs:
           fi
 
           variant_capitalized="$(printf '%s' "$VARIANT" | awk '{print toupper(substr($0,1,1)) substr($0,2)}')"
+          variant_upper="$(printf '%s' "$VARIANT" | tr '[:lower:]' '[:upper:]')"
 
           echo "KEYSTORE_FILENAME=${VARIANT}-signing.jks" >> "$GITHUB_ENV"
           echo "GRADLE_TASK=assemble${variant_capitalized}" >> "$GITHUB_ENV"
           echo "APK_FILENAME=app-${VARIANT}-${RUN_ID}.apk" >> "$GITHUB_ENV"
           echo "ARTIFACT_NAME=app-${VARIANT}-${RUN_ID}" >> "$GITHUB_ENV"
-
-          variant_upper="$(printf '%s' "$VARIANT" | tr '[:lower:]' '[:upper:]')"
 
           resolved_keystore_base64_var="${variant_upper}_KEYSTORE_BASE64"
           resolved_keystore_password_var="${variant_upper}_KEYSTORE_PASSWORD"
