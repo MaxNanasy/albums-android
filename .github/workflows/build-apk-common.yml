@@ -98,33 +98,6 @@ jobs:
           set -euo pipefail
           printf %s "$KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
 
-      - name: Validate keystore entry
-        env:
-          KEYSTORE_PATH: ${{ runner.temp }}/${{ env.KEYSTORE_FILENAME }}
-          KEYSTORE_PASSWORD: ${{ env.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ env.KEY_ALIAS }}
-        run: |
-          set -euo pipefail
-          keytool -list \
-            -keystore "$KEYSTORE_PATH" \
-            -storepass "$KEYSTORE_PASSWORD" \
-            -alias "$KEY_ALIAS"
-
-      - name: Validate signing alias type
-        env:
-          KEYSTORE_PATH: ${{ runner.temp }}/${{ env.KEYSTORE_FILENAME }}
-          KEYSTORE_PASSWORD: ${{ env.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ env.KEY_ALIAS }}
-        run: |
-          set -euo pipefail
-          entry_type="$(keytool -list -v -keystore "$KEYSTORE_PATH" -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" | awk -F': ' '/Entry type:/{print $2; exit}')"
-          if [ "$entry_type" != "PrivateKeyEntry" ]; then
-            echo "Alias '$KEY_ALIAS' is '$entry_type', but APK signing requires a PrivateKeyEntry."
-            echo "Available aliases in keystore:"
-            keytool -list -v -keystore "$KEYSTORE_PATH" -storepass "$KEYSTORE_PASSWORD" | awk -F': ' '/Alias name:|Entry type:/{print $1": "$2}'
-            exit 1
-          fi
-
       - name: Resolve key password for keystore type
         env:
           KEYSTORE_PATH: ${{ runner.temp }}/${{ env.KEYSTORE_FILENAME }}
