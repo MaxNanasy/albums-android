@@ -43,25 +43,21 @@ jobs:
           echo "ARTIFACT_NAME=app-${VARIANT}-apk-${RUN_ID}" >> "$GITHUB_ENV"
           echo "ARTIFACT_PATH=app/build/outputs/apk/${VARIANT}/*.apk" >> "$GITHUB_ENV"
 
-          if [ "$VARIANT" = "debug" ]; then
-            resolved_keystore_base64="$DEBUG_KEYSTORE_BASE64"
-            resolved_keystore_password="$DEBUG_KEYSTORE_PASSWORD"
-            resolved_key_alias="$DEBUG_KEY_ALIAS"
-            resolved_key_password="$DEBUG_KEY_PASSWORD"
+          variant_upper="$(printf '%s' "$VARIANT" | tr '[:lower:]' '[:upper:]')"
 
-            expected_keystore_base64_secret_name="DEBUG_KEYSTORE_BASE64"
-            expected_keystore_password_secret_name="DEBUG_KEYSTORE_PASSWORD"
-            expected_key_alias_secret_name="DEBUG_KEY_ALIAS"
-          else
-            resolved_keystore_base64="$RELEASE_KEYSTORE_BASE64"
-            resolved_keystore_password="$RELEASE_KEYSTORE_PASSWORD"
-            resolved_key_alias="$RELEASE_KEY_ALIAS"
-            resolved_key_password="$RELEASE_KEY_PASSWORD"
+          resolved_keystore_base64_var="${variant_upper}_KEYSTORE_BASE64"
+          resolved_keystore_password_var="${variant_upper}_KEYSTORE_PASSWORD"
+          resolved_key_alias_var="${variant_upper}_KEY_ALIAS"
+          resolved_key_password_var="${variant_upper}_KEY_PASSWORD"
 
-            expected_keystore_base64_secret_name="RELEASE_KEYSTORE_BASE64"
-            expected_keystore_password_secret_name="RELEASE_KEYSTORE_PASSWORD"
-            expected_key_alias_secret_name="RELEASE_KEY_ALIAS"
-          fi
+          resolved_keystore_base64="${!resolved_keystore_base64_var}"
+          resolved_keystore_password="${!resolved_keystore_password_var}"
+          resolved_key_alias="${!resolved_key_alias_var}"
+          resolved_key_password="${!resolved_key_password_var}"
+
+          expected_keystore_base64_secret_name="$resolved_keystore_base64_var"
+          expected_keystore_password_secret_name="$resolved_keystore_password_var"
+          expected_key_alias_secret_name="$resolved_key_alias_var"
 
           check_required_secret() {
             local required_secret="$1"
