@@ -7,27 +7,6 @@ on:
         description: Build variant (debug or release)
         required: true
         type: string
-      keystore_base64_secret_name:
-        description: Source repository secret name for keystore base64
-        required: true
-        type: string
-      keystore_password_secret_name:
-        description: Source repository secret name for keystore password
-        required: true
-        type: string
-      key_alias_secret_name:
-        description: Source repository secret name for key alias
-        required: true
-        type: string
-    secrets:
-      KEYSTORE_BASE64:
-        required: true
-      KEYSTORE_PASSWORD:
-        required: true
-      KEY_ALIAS:
-        required: true
-      KEY_PASSWORD:
-        required: false
 
 jobs:
   build-signed-apk:
@@ -38,10 +17,18 @@ jobs:
       ANDROID_HOME: ${{ github.workspace }}/.android-sdk
 
     steps:
-      - name: Resolve variant-derived settings
+      - name: Resolve variant-derived settings and signing secrets
         env:
           VARIANT: ${{ inputs.variant }}
           RUN_ID: ${{ github.run_id }}
+          DEBUG_KEYSTORE_BASE64: ${{ secrets.DEBUG_KEYSTORE_BASE64 }}
+          DEBUG_KEYSTORE_PASSWORD: ${{ secrets.DEBUG_KEYSTORE_PASSWORD }}
+          DEBUG_KEY_ALIAS: ${{ secrets.DEBUG_KEY_ALIAS }}
+          DEBUG_KEY_PASSWORD: ${{ secrets.DEBUG_KEY_PASSWORD }}
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: |
           set -euo pipefail
           if [ "$VARIANT" != "debug" ] && [ "$VARIANT" != "release" ]; then
@@ -56,6 +43,42 @@ jobs:
           echo "ARTIFACT_NAME=app-${VARIANT}-apk-${RUN_ID}" >> "$GITHUB_ENV"
           echo "ARTIFACT_PATH=app/build/outputs/apk/${VARIANT}/*.apk" >> "$GITHUB_ENV"
 
+          if [ "$VARIANT" = "debug" ]; then
+            resolved_keystore_base64="$DEBUG_KEYSTORE_BASE64"
+            resolved_keystore_password="$DEBUG_KEYSTORE_PASSWORD"
+            resolved_key_alias="$DEBUG_KEY_ALIAS"
+            resolved_key_password="$DEBUG_KEY_PASSWORD"
+
+            expected_keystore_base64_secret_name="DEBUG_KEYSTORE_BASE64"
+            expected_keystore_password_secret_name="DEBUG_KEYSTORE_PASSWORD"
+            expected_key_alias_secret_name="DEBUG_KEY_ALIAS"
+          else
+            resolved_keystore_base64="$RELEASE_KEYSTORE_BASE64"
+            resolved_keystore_password="$RELEASE_KEYSTORE_PASSWORD"
+            resolved_key_alias="$RELEASE_KEY_ALIAS"
+            resolved_key_password="$RELEASE_KEY_PASSWORD"
+
+            expected_keystore_base64_secret_name="RELEASE_KEYSTORE_BASE64"
+            expected_keystore_password_secret_name="RELEASE_KEYSTORE_PASSWORD"
+            expected_key_alias_secret_name="RELEASE_KEY_ALIAS"
+          fi
+
+          while IFS='=' read -r required_secret required_value; do
+            if [ -z "$required_value" ]; then
+              echo "Missing required secret: ${required_secret}"
+              exit 1
+            fi
+          done <<EOF
+${expected_keystore_base64_secret_name}=${resolved_keystore_base64}
+${expected_keystore_password_secret_name}=${resolved_keystore_password}
+${expected_key_alias_secret_name}=${resolved_key_alias}
+EOF
+
+          echo "KEYSTORE_BASE64=$resolved_keystore_base64" >> "$GITHUB_ENV"
+          echo "KEYSTORE_PASSWORD=$resolved_keystore_password" >> "$GITHUB_ENV"
+          echo "KEY_ALIAS=$resolved_key_alias" >> "$GITHUB_ENV"
+          echo "KEY_PASSWORD=$resolved_key_password" >> "$GITHUB_ENV"
+
       - name: Checkout
         uses: actions/checkout@v5
 
@@ -69,31 +92,9 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Validate signing secrets
-        env:
-          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEYSTORE_BASE64_SECRET_NAME: ${{ inputs.keystore_base64_secret_name }}
-          KEYSTORE_PASSWORD_SECRET_NAME: ${{ inputs.keystore_password_secret_name }}
-          KEY_ALIAS_SECRET_NAME: ${{ inputs.key_alias_secret_name }}
-        run: |
-          set -euo pipefail
-
-          while IFS='=' read -r required_secret required_value; do
-            if [ -z "$required_value" ]; then
-              echo "Missing required secret: ${required_secret}"
-              exit 1
-            fi
-          done <<EOF
-${KEYSTORE_BASE64_SECRET_NAME}=${KEYSTORE_BASE64}
-${KEYSTORE_PASSWORD_SECRET_NAME}=${KEYSTORE_PASSWORD}
-${KEY_ALIAS_SECRET_NAME}=${KEY_ALIAS}
-EOF
-
       - name: Decode keystore
         env:
-          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_BASE64: ${{ env.KEYSTORE_BASE64 }}
           KEYSTORE_PATH: ${{ runner.temp }}/${{ env.KEYSTORE_FILENAME }}
         run: |
           set -euo pipefail
@@ -102,17 +103,20 @@ EOF
       - name: Validate keystore entry
         env:
           KEYSTORE_PATH: ${{ runner.temp }}/${{ env.KEYSTORE_FILENAME }}
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEYSTORE_PASSWORD: ${{ env.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ env.KEY_ALIAS }}
         run: |
           set -euo pipefail
-          keytool -list             -keystore "$KEYSTORE_PATH"             -storepass "$KEYSTORE_PASSWORD"             -alias "$KEY_ALIAS"
+          keytool -list \
+            -keystore "$KEYSTORE_PATH" \
+            -storepass "$KEYSTORE_PASSWORD" \
+            -alias "$KEY_ALIAS"
 
       - name: Validate signing alias type
         env:
           KEYSTORE_PATH: ${{ runner.temp }}/${{ env.KEYSTORE_FILENAME }}
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEYSTORE_PASSWORD: ${{ env.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ env.KEY_ALIAS }}
         run: |
           set -euo pipefail
           entry_type="$(keytool -list -v -keystore "$KEYSTORE_PATH" -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" | awk -F': ' '/Entry type:/{print $2; exit}')"
@@ -126,8 +130,8 @@ EOF
       - name: Resolve key password for keystore type
         env:
           KEYSTORE_PATH: ${{ runner.temp }}/${{ env.KEYSTORE_FILENAME }}
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          KEYSTORE_PASSWORD: ${{ env.KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ env.KEY_PASSWORD }}
           VARIANT: ${{ inputs.variant }}
         run: |
           set -euo pipefail
@@ -146,8 +150,8 @@ EOF
       - name: Build APK
         env:
           SIGNING_STORE_FILE: ${{ runner.temp }}/${{ env.KEYSTORE_FILENAME }}
-          SIGNING_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          SIGNING_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          SIGNING_STORE_PASSWORD: ${{ env.KEYSTORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ env.KEY_ALIAS }}
           SIGNING_KEY_PASSWORD: ${{ env.EFFECTIVE_SIGNING_KEY_PASSWORD }}
         run: ./gradlew --no-daemon ${{ env.GRADLE_TASK }}
 

@@ -24,14 +24,7 @@ jobs:
     uses: ./.github/workflows/build-signed-apk.yml
     with:
       variant: debug
-      keystore_base64_secret_name: DEBUG_KEYSTORE_BASE64
-      keystore_password_secret_name: DEBUG_KEYSTORE_PASSWORD
-      key_alias_secret_name: DEBUG_KEY_ALIAS
-    secrets:
-      KEYSTORE_BASE64: ${{ secrets.DEBUG_KEYSTORE_BASE64 }}
-      KEYSTORE_PASSWORD: ${{ secrets.DEBUG_KEYSTORE_PASSWORD }}
-      KEY_ALIAS: ${{ secrets.DEBUG_KEY_ALIAS }}
-      KEY_PASSWORD: ${{ secrets.DEBUG_KEY_PASSWORD }}
+    secrets: inherit
 
   release-build:
     # Route release builds to main pushes, or manual runs that choose release on the main branch only.
@@ -44,11 +37,4 @@ jobs:
     uses: ./.github/workflows/build-signed-apk.yml
     with:
       variant: release
-      keystore_base64_secret_name: RELEASE_KEYSTORE_BASE64
-      keystore_password_secret_name: RELEASE_KEYSTORE_PASSWORD
-      key_alias_secret_name: RELEASE_KEY_ALIAS
-    secrets:
-      KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
-      KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
-      KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
-      KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+    secrets: inherit
