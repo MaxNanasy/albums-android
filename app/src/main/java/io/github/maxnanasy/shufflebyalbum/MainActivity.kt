@@ -17,6 +17,8 @@ import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.recyclerview.widget.DiffUtil
+import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.CoroutineScope
@@ -822,13 +824,10 @@ data class SessionState(
 
 private class ItemAdapter(
     private val onRemove: (ShuffleItem) -> Unit,
-) : RecyclerView.Adapter<ItemAdapter.ItemViewHolder>() {
-    private val items = mutableListOf<ShuffleItem>()
+) : ListAdapter<ShuffleItem, ItemAdapter.ItemViewHolder>(ITEM_DIFF) {
 
     fun submit(next: List<ShuffleItem>) {
-        items.clear()
-        items.addAll(next)
-        notifyDataSetChanged()
+        submitList(next.toList())
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ItemViewHolder {
@@ -836,10 +835,8 @@ private class ItemAdapter(
         return ItemViewHolder(view, onRemove)
     }
 
-    override fun getItemCount(): Int = items.size
-
     override fun onBindViewHolder(holder: ItemViewHolder, position: Int) {
-        holder.bind(items[position])
+        holder.bind(getItem(position))
     }
 
     class ItemViewHolder(
@@ -854,18 +851,69 @@ private class ItemAdapter(
             removeButton.setOnClickListener { onRemove(item) }
         }
     }
+
+    companion object {
+        private val ITEM_DIFF = object : DiffUtil.ItemCallback<ShuffleItem>() {
+            override fun areItemsTheSame(oldItem: ShuffleItem, newItem: ShuffleItem): Boolean {
+                return oldItem.type == newItem.type && oldItem.uri == newItem.uri
+            }
+
+            override fun areContentsTheSame(oldItem: ShuffleItem, newItem: ShuffleItem): Boolean {
+                return oldItem == newItem
+            }
+        }
+    }
 }
 
 private class QueueAdapter : RecyclerView.Adapter<QueueAdapter.QueueViewHolder>() {
     private val items = mutableListOf<String>()
+    private var previousQueueSnapshot: List<ShuffleItem> = emptyList()
+    private var currentItemIndex = RecyclerView.NO_POSITION
 
     fun submit(queue: List<ShuffleItem>, currentIndex: Int) {
-        items.clear()
-        queue.forEachIndexed { index, item ->
-            val marker = if (index == currentIndex) "▶" else "•"
-            items.add("$marker ${index + 1}. ${item.title}")
+        val normalizedIndex = if (currentIndex in queue.indices) currentIndex else RecyclerView.NO_POSITION
+        if (sameQueue(previousQueueSnapshot, queue)) {
+            if (currentItemIndex != normalizedIndex) {
+                if (currentItemIndex != RecyclerView.NO_POSITION) {
+                    items[currentItemIndex] = rowText(previousQueueSnapshot[currentItemIndex], currentItemIndex, false)
+                    notifyItemChanged(currentItemIndex)
+                }
+                if (normalizedIndex != RecyclerView.NO_POSITION) {
+                    items[normalizedIndex] = rowText(queue[normalizedIndex], normalizedIndex, true)
+                    notifyItemChanged(normalizedIndex)
+                }
+                currentItemIndex = normalizedIndex
+            }
+            previousQueueSnapshot = queue.toList()
+            return
         }
-        notifyDataSetChanged()
+
+        val previousItems = items.toList()
+        val nextItems = queue.mapIndexed { index, item ->
+            rowText(item, index, index == normalizedIndex)
+        }
+        val diff = object : DiffUtil.Callback() {
+            override fun getOldListSize(): Int = previousItems.size
+
+            override fun getNewListSize(): Int = nextItems.size
+
+            override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
+                val oldItem = previousQueueSnapshot.getOrNull(oldItemPosition) ?: return false
+                val newItem = queue[newItemPosition]
+                return oldItem.type == newItem.type && oldItem.uri == newItem.uri
+            }
+
+            override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
+                return previousItems[oldItemPosition] == nextItems[newItemPosition]
+            }
+        }
+
+        val diffResult = DiffUtil.calculateDiff(diff)
+        items.clear()
+        items.addAll(nextItems)
+        previousQueueSnapshot = queue.toList()
+        currentItemIndex = normalizedIndex
+        diffResult.dispatchUpdatesTo(this)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): QueueViewHolder {
@@ -881,5 +929,19 @@ private class QueueAdapter : RecyclerView.Adapter<QueueAdapter.QueueViewHolder>(
 
     class QueueViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         val title: TextView = itemView.findViewById(R.id.queueTitle)
+    }
+
+    private fun sameQueue(oldQueue: List<ShuffleItem>, newQueue: List<ShuffleItem>): Boolean {
+        if (oldQueue.size != newQueue.size) return false
+        return oldQueue.indices.all { index ->
+            oldQueue[index].type == newQueue[index].type &&
+                oldQueue[index].uri == newQueue[index].uri &&
+                oldQueue[index].title == newQueue[index].title
+        }
+    }
+
+    private fun rowText(item: ShuffleItem, index: Int, isCurrent: Boolean): String {
+        val marker = if (isCurrent) "▶" else "•"
+        return "$marker ${index + 1}. ${item.title}"
     }
 }
