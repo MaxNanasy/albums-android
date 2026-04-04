@@ -19,6 +19,8 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.snackbar.BaseTransientBottomBar
+import com.google.android.material.snackbar.Snackbar
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -58,6 +60,8 @@ class MainActivity : AppCompatActivity() {
 
     private val itemAdapter = ItemAdapter(onRemove = ::removeItem)
     private val queueAdapter = QueueAdapter()
+    private var pendingRemoval: PendingRemoval? = null
+    private var removalSnackbar: Snackbar? = null
 
     private var session = SessionState()
 
@@ -402,10 +406,47 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun removeItem(item: ShuffleItem) {
-        val next = getItems().toMutableList().apply { removeAll { it.uri == item.uri } }
+        val next = getItems().toMutableList()
+        val removedIndex = next.indexOfFirst { it.uri == item.uri }
+        if (removedIndex == -1) return
+
+        next.removeAt(removedIndex)
         saveItems(next)
         renderItemList()
-        toast("Removed ${item.title}.")
+        pendingRemoval = PendingRemoval(item = item, index = removedIndex)
+
+        removalSnackbar?.dismiss()
+        removalSnackbar = Snackbar.make(findViewById(android.R.id.content), "Removed ${item.title}.", Snackbar.LENGTH_LONG)
+            .setAction("Undo") { undoPendingRemoval() }
+            .addCallback(object : BaseTransientBottomBar.BaseCallback<Snackbar>() {
+                override fun onDismissed(transientBottomBar: Snackbar?, event: Int) {
+                    if (event != DISMISS_EVENT_ACTION) {
+                        pendingRemoval = null
+                    }
+                    if (removalSnackbar === transientBottomBar) {
+                        removalSnackbar = null
+                    }
+                }
+            })
+        removalSnackbar?.show()
+    }
+
+    private fun undoPendingRemoval() {
+        val removal = pendingRemoval ?: return
+        val currentItems = getItems().toMutableList()
+        if (currentItems.any { it.uri == removal.item.uri }) {
+            renderItemList()
+            toast("${removal.item.title} is already in your list.")
+            pendingRemoval = null
+            return
+        }
+
+        val insertIndex = removal.index.coerceIn(0, currentItems.size)
+        currentItems.add(insertIndex, removal.item)
+        saveItems(currentItems)
+        renderItemList()
+        toast("Restored ${removal.item.title}.")
+        pendingRemoval = null
     }
 
     private fun renderItemList() {
@@ -846,6 +887,11 @@ data class ShuffleItem(
     val type: String,
     val uri: String,
     val title: String,
+)
+
+data class PendingRemoval(
+    val item: ShuffleItem,
+    val index: Int,
 )
 
 enum class ActivationState(val value: String) {
