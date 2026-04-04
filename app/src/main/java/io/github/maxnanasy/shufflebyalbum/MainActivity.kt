@@ -32,6 +32,7 @@ import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
+import java.net.UnknownHostException
 import java.security.MessageDigest
 import java.security.SecureRandom
 import kotlin.math.min
@@ -211,7 +212,8 @@ class MainActivity : AppCompatActivity() {
         authStatus.text = "Restoring Spotify session..."
         val token = refreshSpotifyAccessToken()
         if (token == null) {
-            authStatus.text = "Not connected."
+            authStatus.text = "Spotify session restore failed. Connect again."
+            toast("Could not restore Spotify session. Please reconnect.")
             return
         }
         refreshAuthStatus()
@@ -223,18 +225,19 @@ class MainActivity : AppCompatActivity() {
             authStatus.text = "Spotify authorization error: $error"
             return
         }
-        val code = uri.getQueryParameter("code") ?: return
+        val code = uri.getQueryParameter("code")
+        if (code.isNullOrBlank()) {
+            authStatus.text = "Spotify authorization failed: missing authorization code."
+            toast("Spotify login did not return an authorization code.")
+            return
+        }
         val verifier = getStringPref(KEY_VERIFIER)
         if (verifier.isNullOrBlank()) {
             authStatus.text = "Missing PKCE verifier. Connect again."
             return
         }
 
-        val token = exchangeCodeForToken(code, verifier)
-        if (token == null) {
-            authStatus.text = "Failed to exchange Spotify code for token."
-            return
-        }
+        val token = exchangeCodeForToken(code, verifier) ?: return
         saveToken(token)
         prefs.edit().remove(KEY_VERIFIER).apply()
         refreshAuthStatus()
@@ -251,7 +254,7 @@ class MainActivity : AppCompatActivity() {
             return toast("Item is already in your list.")
         }
 
-        val token = getUsableAccessToken() ?: return toast("Connect Spotify first.")
+        val token = getUsableAccessToken() ?: return toast("Connect Spotify first or reconnect if your session expired.")
         val titled = withItemTitle(parsed, token) ?: parsed.copy(title = parsed.uri)
         items.add(titled)
         saveItems(items)
@@ -261,13 +264,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     private suspend fun importAlbumsFromPlaylist() {
-        val token = getUsableAccessToken() ?: return toast("Connect Spotify first.")
+        val token = getUsableAccessToken() ?: return toast("Connect Spotify first or reconnect if your session expired.")
         val playlist = parseSpotifyPlaylistRef(itemUriInput.text.toString().trim())
             ?: return toast("Enter a valid Spotify playlist URL, URI, or playlist ID.")
 
         val existing = getItems().toMutableList()
         val existingUris = existing.map { it.uri }.toMutableSet()
-        val albums = fetchPlaylistAlbums(playlist.id, token)
+        val playlistResult = fetchPlaylistAlbums(playlist.id, token)
+        if (playlistResult.items.isEmpty() && playlistResult.fullyLoaded.not()) {
+            return toast(playlistResult.failureMessage ?: "Failed to import albums from playlist.")
+        }
+        val albums = playlistResult.items
 
         var added = 0
         for (album in albums) {
@@ -278,11 +285,19 @@ class MainActivity : AppCompatActivity() {
         }
         saveItems(existing)
         renderItemList()
+        if (!playlistResult.fullyLoaded) {
+            toast("Imported $added album(s), but the playlist scan was incomplete: ${playlistResult.failureMessage ?: "unknown error"}.")
+            return
+        }
+        if (albums.isEmpty()) {
+            toast("No albums were found in that playlist.")
+            return
+        }
         toast("Imported $added album(s) from playlist (${albums.size} unique album(s) found).")
     }
 
     private suspend fun startShuffleSession() {
-        val token = getUsableAccessToken() ?: return toast("Connect Spotify first.")
+        val token = getUsableAccessToken() ?: return toast("Connect Spotify first or reconnect if your session expired.")
         val items = getItems()
         if (items.isEmpty()) return toast("Add at least one album or playlist first.")
 
@@ -300,9 +315,20 @@ class MainActivity : AppCompatActivity() {
 
     private suspend fun reattachSession() {
         if (session.activationState != ActivationState.DETACHED) return
+        if (getUsableAccessToken() == null) {
+            playbackStatus.text = "Cannot reattach: Spotify session expired. Reconnect."
+            toast("Reattach failed: Spotify session expired.")
+            return
+        }
+        if (session.queue.isEmpty()) {
+            stopSession("Cannot reattach: queue is empty.")
+            toast("Reattach failed: queue is empty.")
+            return
+        }
         session = session.copy(activationState = ActivationState.ACTIVE)
         renderPlaybackControls()
         startMonitorLoop()
+        playbackStatus.text = "Session reattached. Monitoring playback."
         toast("Session reattached.")
     }
 
@@ -318,7 +344,7 @@ class MainActivity : AppCompatActivity() {
         }
         persistRuntimeState()
         renderQueue()
-        val token = getUsableAccessToken() ?: return stopSession("Spotify session expired.")
+        val token = getUsableAccessToken() ?: return stopSession("Spotify session expired. Reconnect to continue.")
         playCurrentItem(token)
     }
 
@@ -331,8 +357,15 @@ class MainActivity : AppCompatActivity() {
         renderPlaybackControls()
         renderQueue()
 
-        spotifyApi("/me/player/shuffle?state=false", "PUT", token, null)
-        spotifyApi("/me/player/repeat?state=off", "PUT", token, null)
+        val shuffleResponse = spotifyApi("/me/player/shuffle?state=false", "PUT", token, null)
+        if (!shuffleResponse.ok) {
+            playbackStatus.text = "Playback warning: failed to disable shuffle (${shuffleResponse.describeFailure()})."
+        }
+
+        val repeatResponse = spotifyApi("/me/player/repeat?state=off", "PUT", token, null)
+        if (!repeatResponse.ok) {
+            playbackStatus.text = "Playback warning: failed to disable repeat (${repeatResponse.describeFailure()})."
+        }
 
         val payload = JSONObject()
             .put("context_uri", current.uri)
@@ -341,9 +374,7 @@ class MainActivity : AppCompatActivity() {
 
         val response = spotifyApi("/me/player/play", "PUT", token, payload.toString())
         if (!response.ok) {
-            session = session.copy(activationState = ActivationState.DETACHED)
-            renderPlaybackControls()
-            playbackStatus.text = "Playback detached due to Spotify response (${response.status})."
+            transitionDetached("Playback detached: ${response.describeFailure()}.")
             return
         }
 
@@ -356,9 +387,15 @@ class MainActivity : AppCompatActivity() {
 
         val response = spotifyApi("/me/player", "GET", token, null)
         if (response.status == 204) return
-        if (!response.ok) return
+        if (!response.ok) {
+            transitionDetached("Playback monitoring paused: ${response.describeFailure()}.")
+            return
+        }
 
-        val body = response.body ?: return
+        val body = response.body ?: run {
+            transitionDetached("Playback monitoring paused: Spotify returned an empty status payload.")
+            return
+        }
         val context = JSONObject(body).optJSONObject("context")
         val contextUri = if (context == null || context.isNull("uri")) null else context.optString("uri")
 
@@ -620,8 +657,14 @@ class MainActivity : AppCompatActivity() {
             "code_verifier" to verifier,
         )
         val response = formPost("https://accounts.spotify.com/api/token", params)
-        if (!response.ok || response.body == null) return null
-        return parseTokenResponse(response.body)
+        if (!response.ok || response.body == null) {
+            authStatus.text = "Spotify token exchange failed: ${response.describeFailure()}."
+            return null
+        }
+        return parseTokenResponse(response.body) ?: run {
+            authStatus.text = "Spotify token exchange failed: invalid token response."
+            null
+        }
     }
 
     private suspend fun refreshSpotifyAccessToken(): String? {
@@ -632,8 +675,14 @@ class MainActivity : AppCompatActivity() {
             "client_id" to SPOTIFY_APP_ID,
         )
         val response = formPost("https://accounts.spotify.com/api/token", params)
-        if (!response.ok || response.body == null) return null
-        val token = parseTokenResponse(response.body) ?: return null
+        if (!response.ok || response.body == null) {
+            authStatus.text = "Spotify token refresh failed: ${response.describeFailure()}."
+            return null
+        }
+        val token = parseTokenResponse(response.body) ?: run {
+            authStatus.text = "Spotify token refresh failed: invalid token response."
+            return null
+        }
         saveToken(token)
         return token.accessToken
     }
@@ -648,13 +697,19 @@ class MainActivity : AppCompatActivity() {
         return item.copy(title = title)
     }
 
-    private suspend fun fetchPlaylistAlbums(playlistId: String, token: String): List<ShuffleItem> {
+    private suspend fun fetchPlaylistAlbums(playlistId: String, token: String): PlaylistAlbumImportResult {
         val byUri = linkedMapOf<String, ShuffleItem>()
         var offset = 0
         while (true) {
             val path = "/playlists/$playlistId/items?limit=50&offset=$offset&additional_types=track&market=from_token"
             val response = spotifyApi(path, "GET", token, null)
-            if (!response.ok || response.body == null) break
+            if (!response.ok || response.body == null) {
+                return PlaylistAlbumImportResult(
+                    items = byUri.values.toList(),
+                    fullyLoaded = false,
+                    failureMessage = response.describeFailure(),
+                )
+            }
             val body = JSONObject(response.body)
             val items = body.optJSONArray("items") ?: JSONArray()
             for (i in 0 until items.length()) {
@@ -668,46 +723,56 @@ class MainActivity : AppCompatActivity() {
             if (body.isNull("next") || body.optString("next").isBlank()) break
             offset += 50
         }
-        return byUri.values.toList()
+        return PlaylistAlbumImportResult(
+            items = byUri.values.toList(),
+            fullyLoaded = true,
+            failureMessage = null,
+        )
     }
 
     private suspend fun spotifyApi(path: String, method: String, token: String, body: String?): HttpResult {
         return withContext(Dispatchers.IO) {
-            val url = URL("https://api.spotify.com/v1$path")
-            val conn = (url.openConnection() as HttpURLConnection).apply {
-                requestMethod = method
-                setRequestProperty("Authorization", "Bearer $token")
-                setRequestProperty("Content-Type", "application/json")
-                doInput = true
-                if (body != null) {
-                    doOutput = true
-                    outputStream.use { it.write(body.toByteArray()) }
+            try {
+                val url = URL("https://api.spotify.com/v1$path")
+                val conn = (url.openConnection() as HttpURLConnection).apply {
+                    requestMethod = method
+                    setRequestProperty("Authorization", "Bearer $token")
+                    setRequestProperty("Content-Type", "application/json")
+                    doInput = true
+                    if (body != null) {
+                        doOutput = true
+                        outputStream.use { it.write(body.toByteArray()) }
+                    }
                 }
+                val status = conn.responseCode
+                val stream = if (status in 200..299) conn.inputStream else conn.errorStream
+                val payload = stream?.use { BufferedReader(InputStreamReader(it)).readText() }
+                HttpResult(status = status, body = payload)
+            } catch (e: Exception) {
+                HttpResult(status = -1, body = null, failureReason = networkFailureReason(e))
             }
-
-            val status = conn.responseCode
-            val stream = if (status in 200..299) conn.inputStream else conn.errorStream
-            val payload = stream?.use { BufferedReader(InputStreamReader(it)).readText() }
-            HttpResult(status = status, body = payload)
         }
     }
 
     private suspend fun formPost(url: String, form: Map<String, String>): HttpResult {
         return withContext(Dispatchers.IO) {
-            val encoded = form.entries.joinToString("&") {
-                "${Uri.encode(it.key)}=${Uri.encode(it.value)}"
+            try {
+                val encoded = form.entries.joinToString("&") {
+                    "${Uri.encode(it.key)}=${Uri.encode(it.value)}"
+                }
+                val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+                    requestMethod = "POST"
+                    setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
+                    doOutput = true
+                }
+                conn.outputStream.use { it.write(encoded.toByteArray()) }
+                val status = conn.responseCode
+                val stream = if (status in 200..299) conn.inputStream else conn.errorStream
+                val payload = stream?.use { BufferedReader(InputStreamReader(it)).readText() }
+                HttpResult(status = status, body = payload)
+            } catch (e: Exception) {
+                HttpResult(status = -1, body = null, failureReason = networkFailureReason(e))
             }
-            val conn = (URL(url).openConnection() as HttpURLConnection).apply {
-                requestMethod = "POST"
-                setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
-                doOutput = true
-            }
-            conn.outputStream.use { it.write(encoded.toByteArray()) }
-
-            val status = conn.responseCode
-            val stream = if (status in 200..299) conn.inputStream else conn.errorStream
-            val payload = stream?.use { BufferedReader(InputStreamReader(it)).readText() }
-            HttpResult(status = status, body = payload)
         }
     }
 
@@ -889,6 +954,7 @@ data class TokenResponse(
 data class HttpResult(
     val status: Int,
     val body: String?,
+    val failureReason: String? = null,
 ) {
     val ok: Boolean get() = status in 200..299
 }
@@ -911,6 +977,39 @@ data class PendingRemoval(
     val bannerView: View,
     val dismissRunnable: Runnable,
 )
+
+
+
+private data class PlaylistAlbumImportResult(
+    val items: List<ShuffleItem>,
+    val fullyLoaded: Boolean,
+    val failureMessage: String?,
+)
+
+private fun HttpResult.describeFailure(): String {
+    failureReason?.let { return it }
+    val statusPart = if (status >= 0) "status $status" else "request failed"
+    val detail = runCatching {
+        if (body.isNullOrBlank()) return@runCatching null
+        val json = JSONObject(body)
+        val errorObject = json.optJSONObject("error")
+        when {
+            errorObject != null -> errorObject.optString("message").ifBlank { null }
+            else -> json.optString("error_description").ifBlank {
+                json.optString("message").ifBlank { null }
+            }
+        }
+    }.getOrNull()
+
+    return if (detail.isNullOrBlank()) statusPart else "$statusPart: $detail"
+}
+
+private fun networkFailureReason(error: Exception): String {
+    return when (error) {
+        is UnknownHostException -> "network unavailable"
+        else -> error.localizedMessage?.takeIf { it.isNotBlank() } ?: "network error"
+    }
+}
 
 enum class ActivationState(val value: String) {
     INACTIVE("inactive"),
