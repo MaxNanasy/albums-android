@@ -21,6 +21,7 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import androidx.recyclerview.widget.SimpleItemAnimator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -125,6 +126,7 @@ class MainActivity : AppCompatActivity() {
         findViewById<RecyclerView>(R.id.queueRecycler).apply {
             layoutManager = LinearLayoutManager(this@MainActivity)
             adapter = queueAdapter
+            (itemAnimator as? SimpleItemAnimator)?.supportsChangeAnimations = false
         }
     }
 
