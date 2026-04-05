@@ -9,6 +9,6 @@ Change `importAlbumsFromPlaylist()` and `fetchPlaylistAlbums()` so Android only 
 - have `fetchPlaylistAlbums()` return either a complete album list or a failure
 - if any page load fails, return an error result without partial albums
 - in `importAlbumsFromPlaylist()`, do not merge anything into saved items when the result is a failure
-- keep the success toast format aligned with the web app once a full scan succeeds
+- on full success, show `Imported <added> album(s) from playlist (<unique> unique album(s) found).`
 
-This change should make playlist import atomic from the user's perspective.
+This change should make playlist import atomic from the user's perspective while keeping its success feedback explicit.

@@ -8,9 +8,9 @@ Align `importStorageJson()` with the web app's import contract:
 
 - require the pasted payload to be a JSON object
 - clear the app's stored keys before import
-- write every imported value as `value?.toString()` instead of restoring native JSON types
+- write every imported value as `String(value ?: "")` instead of restoring native JSON types
 - remove the array-to-`StringSet` special case and the numeric-type branching
 - keep the existing session reset, item-list rerender, and auth-status refresh after import
-- update the toast copy to include the imported key count, matching the web app's feedback style
+- update the toast copy to `Imported <count> key(s).`
 
-This makes storage round-tripping more predictable between the two implementations.
+This makes storage round-tripping more predictable between the two implementations while keeping the import contract explicit.
