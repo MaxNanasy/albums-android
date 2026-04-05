@@ -9,7 +9,7 @@ Update `restoreRuntimeState()` and the post-restore monitoring path to align mor
 - keep treating an empty restored queue as inactive
 - preserve `currentUri` and `observedCurrentContext` exactly as saved
 - after restoration, render the queue and controls before any monitor restart decision
-- use the same active-state guard proposed in the start and reattach plan drafts so restored sessions do not become active unless monitoring should actually resume
+- use the same active-state guard described in `start-session-detached-overwrite.md` and `reattach-detached-overwrite.md` so restored sessions do not become active unless monitoring should actually resume
 
 This should make persisted runtime state more portable between implementations and more robust across app versions.
 
