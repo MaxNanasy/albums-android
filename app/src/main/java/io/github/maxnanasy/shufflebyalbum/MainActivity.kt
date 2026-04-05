@@ -345,12 +345,11 @@ class MainActivity : AppCompatActivity() {
         if (snapshot?.contextUri == expectedUri) {
             session = session.copy(
                 observedCurrentContext = true,
-                detachedProgressMs = snapshot.progressMs ?: session.detachedProgressMs,
             )
             persistRuntimeState()
             playbackStatus.text = "Reattached to current Spotify playback."
         } else {
-            playCurrentItem(token, session.detachedProgressMs)
+            playCurrentItem(token)
         }
 
         transitionActive("Session reattached. Monitoring playback.")
@@ -373,15 +372,13 @@ class MainActivity : AppCompatActivity() {
         playCurrentItem(token)
     }
 
-    private suspend fun playCurrentItem(token: String, startPositionMs: Int = 0) {
+    private suspend fun playCurrentItem(token: String) {
         val current = session.queue.getOrNull(session.index)
             ?: return stopSession("Finished: all selected albums/playlists were played.")
 
-        val safeStartPositionMs = startPositionMs.coerceAtLeast(0)
         session = session.copy(
             currentUri = current.uri,
             observedCurrentContext = false,
-            detachedProgressMs = safeStartPositionMs,
         )
         persistRuntimeState()
         renderPlaybackControls()
@@ -400,7 +397,7 @@ class MainActivity : AppCompatActivity() {
         val payload = JSONObject()
             .put("context_uri", current.uri)
             .put("offset", JSONObject().put("position", 0))
-            .put("position_ms", safeStartPositionMs)
+            .put("position_ms", 0)
 
         val response = spotifyApi("/me/player/play", "PUT", token, payload.toString())
         if (!response.ok) {
@@ -426,8 +423,6 @@ class MainActivity : AppCompatActivity() {
             return
         }
         val contextUri = snapshot.contextUri
-        session = session.copy(detachedProgressMs = snapshot.progressMs ?: session.detachedProgressMs)
-        persistRuntimeState()
 
         if (contextUri == session.currentUri) {
             session = session.copy(observedCurrentContext = true)
@@ -580,10 +575,9 @@ class MainActivity : AppCompatActivity() {
         val json = JSONObject(body)
         val context = json.optJSONObject("context")
         val contextUri = if (context == null || context.isNull("uri")) null else context.optString("uri")
-        val progressMs = if (json.isNull("progress_ms")) null else json.optInt("progress_ms")
         return PlaybackSnapshotResult(
             status = response.status,
-            snapshot = PlaybackSnapshot(contextUri = contextUri, progressMs = progressMs),
+            snapshot = PlaybackSnapshot(contextUri = contextUri),
             ok = true,
             failureReason = response.failureReason,
             body = response.body,
@@ -869,7 +863,6 @@ class MainActivity : AppCompatActivity() {
             index = min(parsed.optInt("index", 0), maxOf(queue.size - 1, 0)),
             currentUri = if (parsed.isNull("currentUri")) null else parsed.optString("currentUri"),
             observedCurrentContext = parsed.optBoolean("observedCurrentContext", false),
-            detachedProgressMs = parsed.optInt("detachedProgressMs", 0).coerceAtLeast(0),
         )
     }
 
@@ -885,7 +878,6 @@ class MainActivity : AppCompatActivity() {
             .put("index", session.index)
             .put("currentUri", session.currentUri)
             .put("observedCurrentContext", session.observedCurrentContext)
-            .put("detachedProgressMs", session.detachedProgressMs)
         prefs.edit().putString(KEY_RUNTIME, data.toString()).apply()
     }
 
@@ -1050,7 +1042,6 @@ private data class PlaylistAlbumImportResult(
 
 private data class PlaybackSnapshot(
     val contextUri: String?,
-    val progressMs: Int?,
 )
 
 private data class PlaybackSnapshotResult(
@@ -1116,7 +1107,6 @@ data class SessionState(
     val index: Int = 0,
     val currentUri: String? = null,
     val observedCurrentContext: Boolean = false,
-    val detachedProgressMs: Int = 0,
 )
 
 private class ItemAdapter(
