@@ -10,6 +10,5 @@ Make the Android auth-callback flow explicitly mirror the web app's state transi
 - centralize callback handling so both `onCreate()` and `onNewIntent()` go through the same post-callback sequence
 - after a successful code exchange, always refresh auth status, rerender items if needed, and clear any temporary verifier state
 - after callback errors, set a stable auth-status message and avoid leaving partially updated auth state behind
-- document in code comments that transport differs by platform but post-callback state handling is intended to stay aligned with the web app
 
 This keeps the unavoidable platform difference isolated while making the user-visible outcome more consistent.
