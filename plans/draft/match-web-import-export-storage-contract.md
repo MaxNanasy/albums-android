@@ -13,8 +13,9 @@ Change the Android import/export feature so its external contract matches the we
 - if the internally stored item payload exists but cannot be parsed into an array, clear the export text box and surface an export error instead of exporting partially valid data
 - stop exporting auth tokens, refresh tokens, runtime/session state, verifier state, and any other preference keys
 - stop importing arbitrary preference keys and typed values; import should only read `shuffle-by-album.items`
-- keep Android's internal storage implementation private; it is acceptable either to keep the current internal item preference key and translate at the import/export boundary, or to migrate Android item persistence to the web key `shuffle-by-album.items`
-- if internal persistence is migrated to the web key, add a one-time read/migrate path so existing Android installs that only have the legacy item key do not lose their saved list
+- migrate Android item persistence to the web key `shuffle-by-album.items`
+- add a one-time read/migrate path so existing Android installs that currently use legacy `spotifyShuffler` naming do not lose their saved data
+- remove `spotifyShuffler` naming from the Android source code entirely, except where it appears inside plan files; use `shuffle-by-album` naming instead for storage keys, constants, helper names, comments, and any other source identifiers or strings
 - keep auth-related prefs and runtime/session prefs Android-local; this change is only for the saved-items data contract
 
-Implementation is complete when Android can round-trip the same JSON shape that the web app produces and consumes without including any unrelated preference data.
+Implementation is complete when Android can round-trip the same JSON shape that the web app produces and consumes without including any unrelated preference data, and when `spotifyShuffler` no longer appears anywhere in the Android source code outside of plan files.
