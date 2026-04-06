@@ -487,17 +487,24 @@ async function refreshSpotifyAccessToken() {
 }
 
 function exportLocalStorageJson() {
-  /** @type {Record<string, string>} */
+  const rawItems = localStorage.getItem(STORAGE_KEYS.items);
+  /** @type {Record<string, unknown>} */
   const data = {};
-  for (let index = 0; index < localStorage.length; index += 1) {
-    const key = localStorage.key(index);
-    if (!key) continue;
-    const value = localStorage.getItem(key);
-    data[key] = value ?? '';
+
+  if (rawItems) {
+    try {
+      data[STORAGE_KEYS.items] = JSON.parse(rawItems);
+    } catch {
+      el.storageJson.value = '';
+      showToast('Unable to export saved items because stored data is invalid JSON.', 'error');
+      return;
+    }
+  } else {
+    data[STORAGE_KEYS.items] = [];
   }
 
   el.storageJson.value = JSON.stringify(data, null, 2);
-  showToast(`Exported ${Object.keys(data).length} local storage key(s) to JSON.`, 'success');
+  showToast('Exported saved items to JSON.', 'success');
 }
 
 function importLocalStorageJson() {
@@ -521,18 +528,44 @@ function importLocalStorageJson() {
     return;
   }
 
-  /** @type {[string, unknown][]} */
-  const entries = Object.entries(parsed);
-  localStorage.clear();
-  for (const [key, value] of entries) {
-    if (typeof key !== 'string' || key.length === 0) continue;
-    localStorage.setItem(key, String(value ?? ''));
+  const parsedObject = /** @type {Record<string, unknown>} */ (parsed);
+  const maybeItems = parsedObject[STORAGE_KEYS.items];
+  if (!Array.isArray(maybeItems)) {
+    showToast('Import JSON must include a valid shuffle-by-album.items array.', 'error');
+    return;
   }
 
-  stopSession('Local storage imported. Session reset.');
+  /** @type {unknown[]} */
+  const parsedItems = maybeItems;
+
+  saveItems(
+    parsedItems
+      .filter(
+        /**
+         * @param {unknown} item
+         * @returns {item is {type: ItemType; uri: string; title?: unknown}}
+         */
+        (item) => {
+          if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
+          /** @type {Record<string, unknown>} */
+          const parsedItem = /** @type {Record<string, unknown>} */ (item);
+          return (
+            (parsedItem.type === 'album' || parsedItem.type === 'playlist')
+            && typeof parsedItem.uri === 'string'
+          );
+        },
+      )
+      .map((item) => ({
+        type: item.type,
+        uri: item.uri,
+        title: typeof item.title === 'string' ? item.title : item.uri,
+      })),
+  );
+
+  stopSession('Data imported. Session reset.');
   renderItemList();
   refreshAuthStatus();
-  showToast(`Imported ${entries.length} local storage key(s).`, 'success');
+  showToast('Imported saved items.', 'success');
 }
 
 function getToken() {

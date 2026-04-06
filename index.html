@@ -56,24 +56,24 @@
       </section>
 
       <section class="panel">
-        <h2>4) Import / Export Local Storage</h2>
+        <h2>4) Import / Export Data</h2>
         <div class="row">
-          <button id="export-storage-btn" type="button">Export Local Storage JSON</button>
+          <button id="export-storage-btn" type="button">Export Data JSON</button>
           <button id="import-storage-btn" type="button" class="secondary">
-            Import Local Storage JSON
+            Import Data JSON
           </button>
         </div>
         <label>
-          Local Storage JSON
+          Data JSON
           <textarea
             id="storage-json"
             rows="10"
-            placeholder='{"shuffle-by-album.items":"[...]"}'
+            placeholder='{"shuffle-by-album.items":[{"type":"album","uri":...'
           ></textarea>
         </label>
         <p class="small">
-          Export copies all current local storage key/value pairs into the box. Import replaces all
-          existing local storage data with the JSON object you provide.
+          Export copies your saved items into the text box.  Import replaces saved items with the
+          data in the text box.
         </p>
       </section>
     </main>
