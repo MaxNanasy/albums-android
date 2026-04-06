@@ -91,6 +91,7 @@ class MainActivity : AppCompatActivity() {
 
         appScope.launch {
             bootstrapAuthState(intent?.data)
+            ensureStoredItemTitles()
             restoreSessionMonitoringIfNeeded()
         }
     }
@@ -1006,6 +1007,25 @@ class MainActivity : AppCompatActivity() {
         } else {
             null
         }
+    }
+
+    private suspend fun ensureStoredItemTitles() {
+        val existingItems = getItems()
+        if (existingItems.isEmpty()) return
+        val token = getUsableAccessToken() ?: return
+
+        var updated = false
+        val reconciled = existingItems.map { item ->
+            val needsTitle = item.title.isBlank() || item.title == item.uri
+            if (!needsTitle) return@map item
+            val titled = withItemTitle(item, token) ?: return@map item
+            updated = true
+            titled
+        }
+
+        if (!updated) return
+        saveItems(reconciled)
+        renderItemList()
     }
 
     private fun spotifyIdFromUri(uri: String): String? {
