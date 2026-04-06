@@ -162,7 +162,19 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun refreshAuthStatus() {
-        authStatus.text = if (getToken() == null) "Not connected." else "Connected."
+        val token = getToken()
+        if (token == null) {
+            authStatus.text = "Not connected."
+            return
+        }
+        val grantedScopes = getGrantedScopes()
+        val hasPlaylistScopes = grantedScopes.contains("playlist-read-private") &&
+            grantedScopes.contains("playlist-read-collaborative")
+        authStatus.text = if (hasPlaylistScopes) {
+            "Connected."
+        } else {
+            "Connected, but token is missing playlist import scopes. Disconnect and reconnect."
+        }
     }
 
     private fun startLogin() {
@@ -725,6 +737,7 @@ class MainActivity : AppCompatActivity() {
             .remove(KEY_TOKEN_SCOPE)
             .remove(KEY_VERIFIER)
             .apply()
+        refreshAuthStatus()
     }
 
     private suspend fun exchangeCodeForToken(code: String, verifier: String): TokenResponse? {
@@ -775,7 +788,17 @@ class MainActivity : AppCompatActivity() {
             return null
         }
         saveToken(token)
+        refreshAuthStatus()
         return token.accessToken
+    }
+
+    private fun getGrantedScopes(): Set<String> {
+        return getStringPref(KEY_TOKEN_SCOPE)
+            .orEmpty()
+            .split(Regex("\\s+"))
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .toSet()
     }
 
     private suspend fun withItemTitle(item: ShuffleItem, token: String): ShuffleItem? {
