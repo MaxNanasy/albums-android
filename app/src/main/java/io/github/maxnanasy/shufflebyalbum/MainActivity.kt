@@ -62,6 +62,7 @@ class MainActivity : AppCompatActivity() {
     private val itemAdapter = ItemAdapter(onRemove = ::removeItem)
     private val queueAdapter = QueueAdapter()
     private val pendingRemovals = mutableMapOf<Long, PendingRemoval>()
+    private val errorToastCooldowns = mutableMapOf<String, Long>()
     private var nextPendingRemovalId: Long = 0
 
     private var session = SessionState()
@@ -90,13 +91,16 @@ class MainActivity : AppCompatActivity() {
 
         appScope.launch {
             bootstrapAuthState(intent?.data)
+            ensureStoredItemTitles()
             restoreSessionMonitoringIfNeeded()
         }
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        handleAuthRedirect(intent.data)
+        appScope.launch {
+            processAuthRedirect(intent.data)
+        }
     }
 
     override fun onDestroy() {
@@ -161,7 +165,19 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun refreshAuthStatus() {
-        authStatus.text = if (getToken() == null) "Not connected." else "Connected."
+        val token = getToken()
+        if (token == null) {
+            authStatus.text = "Not connected."
+            return
+        }
+        val grantedScopes = getGrantedScopes()
+        val hasPlaylistScopes = grantedScopes.contains("playlist-read-private") &&
+            grantedScopes.contains("playlist-read-collaborative")
+        authStatus.text = if (hasPlaylistScopes) {
+            "Connected."
+        } else {
+            "Connected, but token is missing playlist import scopes. Disconnect and reconnect."
+        }
     }
 
     private fun startLogin() {
@@ -186,16 +202,8 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun handleAuthRedirect(uri: Uri?) {
-        if (uri == null || uri.scheme != "shufflebyalbum") return
-        appScope.launch {
-            processAuthRedirect(uri)
-        }
-    }
-
     private suspend fun bootstrapAuthState(uri: Uri?) {
-        if (uri != null && uri.scheme == "shufflebyalbum") {
-            processAuthRedirect(uri)
+        if (processAuthRedirect(uri)) {
             return
         }
 
@@ -219,30 +227,37 @@ class MainActivity : AppCompatActivity() {
         refreshAuthStatus()
     }
 
-    private suspend fun processAuthRedirect(uri: Uri) {
+    private suspend fun processAuthRedirect(uri: Uri?): Boolean {
+        if (uri == null || uri.scheme != "shufflebyalbum") return false
         val error = uri.getQueryParameter("error")
         if (error != null) {
             authStatus.text = "Spotify authorization error: $error"
-            return
+            prefs.edit().remove(KEY_VERIFIER).apply()
+            return true
         }
         val code = uri.getQueryParameter("code")
         if (code.isNullOrBlank()) {
             authStatus.text = "Spotify authorization failed: missing authorization code."
-            toast("Spotify login did not return an authorization code.")
-            return
+            reportError(toastMessage = "Spotify login did not return an authorization code.")
+            prefs.edit().remove(KEY_VERIFIER).apply()
+            return true
         }
         val verifier = getStringPref(KEY_VERIFIER)
         if (verifier.isNullOrBlank()) {
             authStatus.text = "Missing PKCE verifier. Connect again."
-            return
+            return true
         }
 
-        val token = exchangeCodeForToken(code, verifier) ?: return
+        val token = exchangeCodeForToken(code, verifier) ?: run {
+            prefs.edit().remove(KEY_VERIFIER).apply()
+            return true
+        }
         saveToken(token)
         prefs.edit().remove(KEY_VERIFIER).apply()
         refreshAuthStatus()
         toast("Connected to Spotify.")
         renderItemList()
+        return true
     }
 
     private suspend fun addItem() {
@@ -255,7 +270,8 @@ class MainActivity : AppCompatActivity() {
         }
 
         val token = getUsableAccessToken() ?: return toast("Connect Spotify first or reconnect if your session expired.")
-        val titled = withItemTitle(parsed, token) ?: parsed.copy(title = parsed.uri)
+        val titled = withItemTitle(parsed, token)
+            ?: return toast("Unable to load title for that item. Please try another URI.")
         items.add(titled)
         saveItems(items)
         renderItemList()
@@ -271,7 +287,7 @@ class MainActivity : AppCompatActivity() {
         val existing = getItems().toMutableList()
         val existingUris = existing.map { it.uri }.toMutableSet()
         val playlistResult = fetchPlaylistAlbums(playlist.id, token)
-        if (playlistResult.items.isEmpty() && playlistResult.fullyLoaded.not()) {
+        if (!playlistResult.fullyLoaded) {
             return toast(playlistResult.failureMessage ?: "Failed to import albums from playlist.")
         }
         val albums = playlistResult.items
@@ -285,14 +301,6 @@ class MainActivity : AppCompatActivity() {
         }
         saveItems(existing)
         renderItemList()
-        if (!playlistResult.fullyLoaded) {
-            toast("Imported $added album(s), but the playlist scan was incomplete: ${playlistResult.failureMessage ?: "unknown error"}.")
-            return
-        }
-        if (albums.isEmpty()) {
-            toast("No albums were found in that playlist.")
-            return
-        }
         toast("Imported $added album(s) from playlist (${albums.size} unique album(s) found).")
     }
 
@@ -329,8 +337,9 @@ class MainActivity : AppCompatActivity() {
 
         val snapshotResult = fetchCurrentPlaybackSnapshot(token)
         if (!snapshotResult.ok) {
-            transitionDetached("Cannot reattach: ${snapshotResult.describeFailure()}.")
-            toast("Reattach failed: ${snapshotResult.describeFailure()}.")
+            val failure = spotifyFailureMessage(snapshotResult.status, snapshotResult.failureReason)
+            transitionDetached("Cannot reattach: $failure.")
+            reportError(toastMessage = "Reattach failed: $failure.")
             return
         }
 
@@ -386,12 +395,22 @@ class MainActivity : AppCompatActivity() {
 
         val shuffleResponse = spotifyApi("/me/player/shuffle?state=false", "PUT", token, null)
         if (!shuffleResponse.ok) {
-            playbackStatus.text = "Playback warning: failed to disable shuffle (${shuffleResponse.describeFailure()})."
+            reportError(
+                statusView = playbackStatus,
+                statusMessage = "Playback warning: failed to disable shuffle (${spotifyFailureMessage(shuffleResponse.status, shuffleResponse.failureReason)}).",
+                toastMessage = "Playback warning: failed to disable shuffle.",
+                cooldownKey = "playback-warning-shuffle",
+            )
         }
 
         val repeatResponse = spotifyApi("/me/player/repeat?state=off", "PUT", token, null)
         if (!repeatResponse.ok) {
-            playbackStatus.text = "Playback warning: failed to disable repeat (${repeatResponse.describeFailure()})."
+            reportError(
+                statusView = playbackStatus,
+                statusMessage = "Playback warning: failed to disable repeat (${spotifyFailureMessage(repeatResponse.status, repeatResponse.failureReason)}).",
+                toastMessage = "Playback warning: failed to disable repeat.",
+                cooldownKey = "playback-warning-repeat",
+            )
         }
 
         val payload = JSONObject()
@@ -401,7 +420,11 @@ class MainActivity : AppCompatActivity() {
 
         val response = spotifyApi("/me/player/play", "PUT", token, payload.toString())
         if (!response.ok) {
-            transitionDetached("Playback detached: ${response.describeFailure()}.")
+            val failure = spotifyFailureMessage(response.status, response.failureReason)
+            transitionDetached("Playback detached: $failure.")
+            if (isUnrecoverableSpotifyStatus(response.status)) {
+                reportError(toastMessage = "Playback detached: $failure.")
+            }
             return
         }
 
@@ -415,11 +438,20 @@ class MainActivity : AppCompatActivity() {
         val snapshotResult = fetchCurrentPlaybackSnapshot(token)
         if (snapshotResult.status == 204) return
         if (!snapshotResult.ok) {
-            transitionDetached("Playback monitoring paused: ${snapshotResult.describeFailure()}.")
+            val failure = spotifyFailureMessage(snapshotResult.status, snapshotResult.failureReason)
+            transitionDetached("Playback monitoring paused: $failure.")
+            reportError(
+                toastMessage = "Playback monitoring paused: $failure.",
+                cooldownKey = "monitor-failure",
+            )
             return
         }
         val snapshot = snapshotResult.snapshot ?: run {
             transitionDetached("Playback monitoring paused: Spotify returned an empty status payload.")
+            reportError(
+                toastMessage = "Playback monitoring paused: Spotify returned an empty status payload.",
+                cooldownKey = "monitor-empty-payload",
+            )
             return
         }
         val contextUri = snapshot.contextUri
@@ -492,7 +524,7 @@ class MainActivity : AppCompatActivity() {
         val messageView = bannerView.findViewById<TextView>(R.id.undoMessage)
         val undoButton = bannerView.findViewById<Button>(R.id.undoButton)
         val removalId = nextPendingRemovalId++
-        messageView.text = "Removed ${item.title}."
+        messageView.text = "Removed ${quotedTitle(item.title)}."
 
         val dismissRunnable = Runnable {
             clearPendingRemoval(removalId)
@@ -517,7 +549,7 @@ class MainActivity : AppCompatActivity() {
         val currentItems = getItems().toMutableList()
         if (currentItems.any { it.uri == removal.item.uri }) {
             renderItemList()
-            toast("${removal.item.title} is already in your list.")
+            toast("Item is already in your list.")
             return
         }
 
@@ -525,7 +557,7 @@ class MainActivity : AppCompatActivity() {
         currentItems.add(insertIndex, removal.item)
         saveItems(currentItems)
         renderItemList()
-        toast("Restored ${removal.item.title}.")
+        toast("Restored ${quotedTitle(removal.item.title)}.")
     }
 
     private fun clearPendingRemoval(removalId: Long) {
@@ -700,6 +732,7 @@ class MainActivity : AppCompatActivity() {
             .remove(KEY_TOKEN_SCOPE)
             .remove(KEY_VERIFIER)
             .apply()
+        refreshAuthStatus()
     }
 
     private suspend fun exchangeCodeForToken(code: String, verifier: String): TokenResponse? {
@@ -712,11 +745,17 @@ class MainActivity : AppCompatActivity() {
         )
         val response = formPost("https://accounts.spotify.com/api/token", params)
         if (!response.ok || response.body == null) {
-            authStatus.text = "Spotify token exchange failed: ${response.describeFailure()}."
+            reportError(
+                statusView = authStatus,
+                statusMessage = "Spotify token exchange failed: ${spotifyFailureMessage(response.status, response.failureReason)}.",
+            )
             return null
         }
         return parseTokenResponse(response.body) ?: run {
-            authStatus.text = "Spotify token exchange failed: invalid token response."
+            reportError(
+                statusView = authStatus,
+                statusMessage = "Spotify token exchange failed: invalid token response.",
+            )
             null
         }
     }
@@ -730,15 +769,31 @@ class MainActivity : AppCompatActivity() {
         )
         val response = formPost("https://accounts.spotify.com/api/token", params)
         if (!response.ok || response.body == null) {
-            authStatus.text = "Spotify token refresh failed: ${response.describeFailure()}."
+            reportError(
+                statusView = authStatus,
+                statusMessage = "Spotify token refresh failed: ${spotifyFailureMessage(response.status, response.failureReason)}.",
+            )
             return null
         }
         val token = parseTokenResponse(response.body) ?: run {
-            authStatus.text = "Spotify token refresh failed: invalid token response."
+            reportError(
+                statusView = authStatus,
+                statusMessage = "Spotify token refresh failed: invalid token response.",
+            )
             return null
         }
         saveToken(token)
+        refreshAuthStatus()
         return token.accessToken
+    }
+
+    private fun getGrantedScopes(): Set<String> {
+        return getStringPref(KEY_TOKEN_SCOPE)
+            .orEmpty()
+            .split(Regex("\\s+"))
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .toSet()
     }
 
     private suspend fun withItemTitle(item: ShuffleItem, token: String): ShuffleItem? {
@@ -759,7 +814,7 @@ class MainActivity : AppCompatActivity() {
             val response = spotifyApi(path, "GET", token, null)
             if (!response.ok || response.body == null) {
                 return PlaylistAlbumImportResult(
-                    items = byUri.values.toList(),
+                    items = emptyList(),
                     fullyLoaded = false,
                     failureMessage = response.describeFailure(),
                 )
@@ -786,6 +841,21 @@ class MainActivity : AppCompatActivity() {
     }
 
     private suspend fun spotifyApi(path: String, method: String, token: String, body: String?): HttpResult {
+        val firstAttempt = runSpotifyApiRequest(path, method, token, body)
+        if (firstAttempt.status != 401) return firstAttempt
+
+        val refreshedToken = refreshSpotifyAccessToken() ?: run {
+            handleExpiredApiSession()
+            return firstAttempt
+        }
+        val replayed = runSpotifyApiRequest(path, method, refreshedToken, body)
+        if (replayed.status == 401) {
+            handleExpiredApiSession()
+        }
+        return replayed
+    }
+
+    private suspend fun runSpotifyApiRequest(path: String, method: String, token: String, body: String?): HttpResult {
         return withContext(Dispatchers.IO) {
             try {
                 val url = URL("https://api.spotify.com/v1$path")
@@ -807,6 +877,21 @@ class MainActivity : AppCompatActivity() {
                 HttpResult(status = -1, body = null, failureReason = networkFailureReason(e))
             }
         }
+    }
+
+    private fun handleExpiredApiSession() {
+        clearAuth()
+        refreshAuthStatus()
+        val message = "Spotify session expired. Reconnect."
+        if (session.activationState == ActivationState.ACTIVE || session.activationState == ActivationState.DETACHED) {
+            transitionDetached(message)
+        } else {
+            playbackStatus.text = message
+        }
+        reportError(
+            toastMessage = "Spotify session expired. Please reconnect.",
+            cooldownKey = "auth-expired",
+        )
     }
 
     private suspend fun formPost(url: String, form: Map<String, String>): HttpResult {
@@ -924,6 +1009,25 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private suspend fun ensureStoredItemTitles() {
+        val existingItems = getItems()
+        if (existingItems.isEmpty()) return
+        val token = getUsableAccessToken() ?: return
+
+        var updated = false
+        val reconciled = existingItems.map { item ->
+            val needsTitle = item.title.isBlank() || item.title == item.uri
+            if (!needsTitle) return@map item
+            val titled = withItemTitle(item, token) ?: return@map item
+            updated = true
+            titled
+        }
+
+        if (!updated) return
+        saveItems(reconciled)
+        renderItemList()
+    }
+
     private fun spotifyIdFromUri(uri: String): String? {
         return Regex("^spotify:(album|playlist):([a-zA-Z0-9]+)$").matchEntire(uri)?.groupValues?.get(2)
     }
@@ -955,8 +1059,63 @@ class MainActivity : AppCompatActivity() {
         }.getOrNull()
     }
 
+    private fun quotedTitle(title: String): String {
+        return "“$title”"
+    }
+
     private fun toast(message: String) {
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+    }
+
+    private fun reportError(
+        statusView: TextView? = null,
+        statusMessage: String? = null,
+        toastMessage: String? = null,
+        cooldownKey: String? = null,
+    ) {
+        if (!statusMessage.isNullOrBlank() && statusView != null) {
+            statusView.text = statusMessage
+        }
+        if (toastMessage.isNullOrBlank()) return
+        if (cooldownKey == null) {
+            toast(toastMessage)
+            return
+        }
+
+        val now = System.currentTimeMillis()
+        val nextAllowed = errorToastCooldowns[cooldownKey] ?: 0L
+        if (now < nextAllowed) return
+        errorToastCooldowns[cooldownKey] = now + ERROR_TOAST_COOLDOWN_MS
+        toast(toastMessage)
+    }
+
+    private fun spotifyFailureMessage(status: Int, failureReason: String?): String {
+        failureReason?.let { return normalizeNetworkError(it) }
+        return spotifyStatusMessage(status)
+    }
+
+    private fun spotifyStatusMessage(status: Int): String {
+        return when (status) {
+            400 -> "request was invalid"
+            401 -> "Spotify session expired. Reconnect."
+            403 -> "Spotify denied permission for this action"
+            404 -> "Spotify player or item was not found"
+            429 -> "Spotify rate limited this request"
+            in 500..599 -> "Spotify service is temporarily unavailable"
+            else -> "status $status"
+        }
+    }
+
+    private fun isUnrecoverableSpotifyStatus(status: Int): Boolean {
+        return status in setOf(400, 401, 403, 404)
+    }
+
+    private fun normalizeNetworkError(reason: String): String {
+        return when (reason.lowercase()) {
+            "network unavailable" -> "network unavailable"
+            "network error" -> "network error"
+            else -> reason
+        }
     }
 
     private fun getStringPref(key: String): String? {
@@ -996,6 +1155,7 @@ class MainActivity : AppCompatActivity() {
         private const val KEY_ITEMS = "spotifyShuffler.items"
         private const val KEY_RUNTIME = "spotifyShuffler.runtime"
         private const val UNDO_BANNER_DURATION_MS = 5_000L
+        private const val ERROR_TOAST_COOLDOWN_MS = 8_000L
     }
 }
 
