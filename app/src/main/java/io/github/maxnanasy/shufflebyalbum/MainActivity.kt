@@ -286,7 +286,7 @@ class MainActivity : AppCompatActivity() {
         val existing = getItems().toMutableList()
         val existingUris = existing.map { it.uri }.toMutableSet()
         val playlistResult = fetchPlaylistAlbums(playlist.id, token)
-        if (playlistResult.items.isEmpty() && playlistResult.fullyLoaded.not()) {
+        if (!playlistResult.fullyLoaded) {
             return toast(playlistResult.failureMessage ?: "Failed to import albums from playlist.")
         }
         val albums = playlistResult.items
@@ -300,14 +300,6 @@ class MainActivity : AppCompatActivity() {
         }
         saveItems(existing)
         renderItemList()
-        if (!playlistResult.fullyLoaded) {
-            toast("Imported $added album(s), but the playlist scan was incomplete: ${playlistResult.failureMessage ?: "unknown error"}.")
-            return
-        }
-        if (albums.isEmpty()) {
-            toast("No albums were found in that playlist.")
-            return
-        }
         toast("Imported $added album(s) from playlist (${albums.size} unique album(s) found).")
     }
 
@@ -821,7 +813,7 @@ class MainActivity : AppCompatActivity() {
             val response = spotifyApi(path, "GET", token, null)
             if (!response.ok || response.body == null) {
                 return PlaylistAlbumImportResult(
-                    items = byUri.values.toList(),
+                    items = emptyList(),
                     fullyLoaded = false,
                     failureMessage = response.describeFailure(),
                 )
