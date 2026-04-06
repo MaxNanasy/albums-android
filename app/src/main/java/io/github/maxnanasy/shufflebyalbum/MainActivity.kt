@@ -524,7 +524,7 @@ class MainActivity : AppCompatActivity() {
         val messageView = bannerView.findViewById<TextView>(R.id.undoMessage)
         val undoButton = bannerView.findViewById<Button>(R.id.undoButton)
         val removalId = nextPendingRemovalId++
-        messageView.text = "Removed ${item.title}."
+        messageView.text = "Removed ${quotedTitle(item.title)}."
 
         val dismissRunnable = Runnable {
             clearPendingRemoval(removalId)
@@ -549,7 +549,7 @@ class MainActivity : AppCompatActivity() {
         val currentItems = getItems().toMutableList()
         if (currentItems.any { it.uri == removal.item.uri }) {
             renderItemList()
-            toast("${removal.item.title} is already in your list.")
+            toast("Item is already in your list.")
             return
         }
 
@@ -557,7 +557,7 @@ class MainActivity : AppCompatActivity() {
         currentItems.add(insertIndex, removal.item)
         saveItems(currentItems)
         renderItemList()
-        toast("Restored ${removal.item.title}.")
+        toast("Restored ${quotedTitle(removal.item.title)}.")
     }
 
     private fun clearPendingRemoval(removalId: Long) {
@@ -1057,6 +1057,10 @@ class MainActivity : AppCompatActivity() {
                 scope = json.optString("scope").ifBlank { null },
             )
         }.getOrNull()
+    }
+
+    private fun quotedTitle(title: String): String {
+        return "“$title”"
     }
 
     private fun toast(message: String) {
