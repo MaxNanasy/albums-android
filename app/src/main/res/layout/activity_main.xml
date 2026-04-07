@@ -227,7 +227,7 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="4) Import / Export Local Storage"
+                    android:text="4) Import / Export Data"
                     android:textStyle="bold" />
 
                 <LinearLayout
@@ -242,7 +242,7 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="Export JSON" />
+                        android:text="Export Data JSON" />
 
                     <com.google.android.material.button.MaterialButton
                         style="@style/Widget.MaterialComponents.Button.OutlinedButton"
@@ -251,8 +251,15 @@
                         android:layout_height="wrap_content"
                         android:layout_marginStart="8dp"
                         android:layout_weight="1"
-                        android:text="Import JSON" />
+                        android:text="Import Data JSON" />
                 </LinearLayout>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="Data JSON"
+                    android:textStyle="bold" />
 
                 <EditText
                     android:id="@+id/storageJsonInput"
@@ -260,10 +267,17 @@
                     android:layout_height="180dp"
                     android:layout_marginTop="8dp"
                     android:gravity="top|start"
-                    android:hint="{&quot;spotifyShuffler.items&quot;:&quot;[...]&quot;}"
+                    android:hint="{&quot;shuffle-by-album.items&quot;:[{&quot;type&quot;:&quot;album&quot;,&quot;uri&quot;:..."
                     android:inputType="textMultiLine"
                     android:scrollbars="vertical"
                     android:importantForAutofill="no" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="Export copies your saved items into the text box. Import replaces saved items with the data in the text box."
+                    android:textSize="12sp" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
     </LinearLayout>

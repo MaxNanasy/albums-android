@@ -28,6 +28,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import org.json.JSONTokener
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
@@ -40,7 +41,7 @@ import kotlin.math.min
 class MainActivity : AppCompatActivity() {
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
-    private val prefs by lazy { getSharedPreferences("spotifyShuffler", Context.MODE_PRIVATE) }
+    private val prefs by lazy { getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE) }
 
     private lateinit var authStatus: TextView
     private lateinit var playbackStatus: TextView
@@ -672,17 +673,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun exportStorageJson() {
-        val data = JSONObject().apply {
-            prefs.all.forEach { (key, value) ->
-                when (value) {
-                    null -> put(key, JSONObject.NULL)
-                    is Set<*> -> put(key, JSONArray(value.toList()))
-                    else -> put(key, value)
-                }
-            }
+        val exportItems = runCatching { getStoredItemArrayForExport() }.getOrElse {
+            storageJsonInput.setText("")
+            toast("Unable to export saved items because stored data is invalid JSON.")
+            return
         }
+        val data = JSONObject().put(KEY_ITEMS, exportItems)
         storageJsonInput.setText(data.toString(2))
-        toast("Exported ${prefs.all.size} key(s) to JSON.")
+        toast("Exported saved items to JSON.")
     }
 
     private fun importStorageJson() {
@@ -690,45 +688,44 @@ class MainActivity : AppCompatActivity() {
         if (raw.isEmpty()) return toast("Paste a JSON object to import.")
 
         val parsed = try {
-            JSONObject(raw)
+            JSONTokener(raw).nextValue()
         } catch (_: Exception) {
-            return toast("Invalid JSON.")
+            return toast("Invalid JSON. Please provide a valid JSON object.")
         }
+        if (parsed !is JSONObject) return toast("Import JSON must be an object of key/value pairs.")
 
-        val editor = prefs.edit().clear()
-        val keys = parsed.keys()
-        while (keys.hasNext()) {
-            val key = keys.next()
-            when (val value = parsed.opt(key)) {
-                JSONObject.NULL, null -> editor.remove(key)
-                is Boolean -> editor.putBoolean(key, value)
-                is Int -> editor.putInt(key, value)
-                is Long -> editor.putLong(key, value)
-                is Double -> {
-                    if (value % 1.0 == 0.0 && value in Int.MIN_VALUE.toDouble()..Int.MAX_VALUE.toDouble()) {
-                        editor.putInt(key, value.toInt())
-                    } else if (value % 1.0 == 0.0 && value in Long.MIN_VALUE.toDouble()..Long.MAX_VALUE.toDouble()) {
-                        editor.putLong(key, value.toLong())
-                    } else {
-                        editor.putFloat(key, value.toFloat())
-                    }
-                }
-                is JSONArray -> {
-                    val items = mutableSetOf<String>()
-                    for (index in 0 until value.length()) {
-                        items.add(value.optString(index, ""))
-                    }
-                    editor.putStringSet(key, items)
-                }
-                else -> editor.putString(key, value.toString())
+        val importedItemsArray = parsed.optJSONArray(KEY_ITEMS)
+            ?: return toast("Import JSON must include a valid shuffle-by-album.items array.")
+
+        val importedItems = buildList {
+            for (index in 0 until importedItemsArray.length()) {
+                val obj = importedItemsArray.optJSONObject(index) ?: continue
+                val type = obj.optString("type")
+                val uri = obj.opt("uri")
+                if ((type != "album" && type != "playlist") || uri !is String) continue
+                val title = obj.opt("title")
+                add(
+                    ShuffleItem(
+                        type = type,
+                        uri = uri,
+                        title = if (title is String) title else uri,
+                    ),
+                )
             }
         }
-        editor.apply()
+        saveItems(importedItems)
 
-        stopSession("Storage imported. Session reset.")
+        stopSession("Data imported. Session reset.")
         refreshAuthStatus()
         renderItemList()
-        toast("Imported local storage JSON.")
+        toast("Imported saved items.")
+    }
+
+    private fun getStoredItemArrayForExport(): JSONArray {
+        val raw = getStringPref(KEY_ITEMS) ?: return JSONArray()
+        val parsed = JSONTokener(raw).nextValue()
+        if (parsed !is JSONArray) throw IllegalArgumentException("Expected stored items array")
+        return parsed
     }
 
     private fun getItems(): List<ShuffleItem> {
@@ -1198,6 +1195,7 @@ class MainActivity : AppCompatActivity() {
     companion object {
         private const val SPOTIFY_APP_ID = "5082b1452bc24cc3a0955f2d1c4e5560"
         private const val REDIRECT_URI = "shufflebyalbum://callback"
+        private const val PREFS_NAME = "shuffle-by-album"
 
         private val SCOPES = listOf(
             "user-modify-playback-state",
@@ -1206,13 +1204,13 @@ class MainActivity : AppCompatActivity() {
             "playlist-read-collaborative",
         )
 
-        private const val KEY_VERIFIER = "spotifyShuffler.pkceVerifier"
-        private const val KEY_TOKEN = "spotifyShuffler.token"
-        private const val KEY_REFRESH_TOKEN = "spotifyShuffler.refreshToken"
-        private const val KEY_TOKEN_EXPIRY = "spotifyShuffler.tokenExpiry"
-        private const val KEY_TOKEN_SCOPE = "spotifyShuffler.tokenScope"
-        private const val KEY_ITEMS = "spotifyShuffler.items"
-        private const val KEY_RUNTIME = "spotifyShuffler.runtime"
+        private const val KEY_VERIFIER = "shuffle-by-album.pkceVerifier"
+        private const val KEY_TOKEN = "shuffle-by-album.token"
+        private const val KEY_REFRESH_TOKEN = "shuffle-by-album.refreshToken"
+        private const val KEY_TOKEN_EXPIRY = "shuffle-by-album.tokenExpiry"
+        private const val KEY_TOKEN_SCOPE = "shuffle-by-album.tokenScope"
+        private const val KEY_ITEMS = "shuffle-by-album.items"
+        private const val KEY_RUNTIME = "shuffle-by-album.runtime"
         private const val UNDO_BANNER_DURATION_MS = 5_000L
         private const val ERROR_TOAST_COOLDOWN_MS = 8_000L
     }
