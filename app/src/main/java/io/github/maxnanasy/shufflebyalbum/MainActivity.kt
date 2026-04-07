@@ -318,8 +318,9 @@ class MainActivity : AppCompatActivity() {
         persistRuntimeState()
         renderQueue()
         renderPlaybackControls()
+        playbackStatus.text = "Session started with ${session.queue.size} item(s)."
         when (playCurrentItem(token)) {
-            PlaybackStartResult.STARTED -> transitionActive("Monitoring playback.")
+            PlaybackStartResult.STARTED -> transitionActive(startMonitoring = true)
             PlaybackStartResult.DETACHED,
             PlaybackStartResult.STOPPED,
             -> Unit
@@ -330,13 +331,13 @@ class MainActivity : AppCompatActivity() {
         if (session.activationState != ActivationState.DETACHED) return
         val token = getUsableAccessToken()
         if (token == null) {
-            playbackStatus.text = "Cannot reattach: Spotify session expired. Reconnect."
-            toast("Reattach failed: Spotify session expired.")
+            playbackStatus.text = "Spotify session expired. Please reconnect."
+            toast("Spotify session expired. Please reconnect.")
             return
         }
         if (session.queue.isEmpty()) {
-            stopSession("Cannot reattach: queue is empty.")
-            toast("Reattach failed: queue is empty.")
+            stopSession("No queued item available to reattach.")
+            toast("No queued item available to reattach.")
             return
         }
 
@@ -349,8 +350,8 @@ class MainActivity : AppCompatActivity() {
         }
 
         val current = session.queue.getOrNull(session.index) ?: run {
-            stopSession("Cannot reattach: current queue item missing.")
-            toast("Reattach failed: current queue item missing.")
+            stopSession("No queued item available to reattach.")
+            toast("No queued item available to reattach.")
             return
         }
         val expectedUri = session.currentUri ?: current.uri
@@ -358,16 +359,19 @@ class MainActivity : AppCompatActivity() {
 
         if (snapshot?.contextUri == expectedUri) {
             session = session.copy(
+                activationState = ActivationState.ACTIVE,
+                currentUri = expectedUri,
                 observedCurrentContext = true,
             )
             persistRuntimeState()
-            playbackStatus.text = "Reattached to current Spotify playback."
-            transitionActive("Session reattached. Monitoring playback.")
+            renderPlaybackControls()
+            playbackStatus.text = formatNowPlayingStatus(current)
+            startMonitorLoop()
             toast("Session reattached.")
         } else {
             when (playCurrentItem(token)) {
                 PlaybackStartResult.STARTED -> {
-                    transitionActive("Session reattached. Monitoring playback.")
+                    transitionActive(startMonitoring = true)
                     toast("Session reattached.")
                 }
                 PlaybackStartResult.DETACHED,
@@ -475,7 +479,7 @@ class MainActivity : AppCompatActivity() {
 
     private suspend fun monitorPlayback() {
         if (session.activationState != ActivationState.ACTIVE || session.currentUri == null) return
-        val token = getUsableAccessToken() ?: return transitionDetached("Spotify session expired. Reconnect.")
+        val token = getUsableAccessToken() ?: return transitionDetached("Spotify session expired. Please reconnect.")
 
         val snapshotResult = fetchCurrentPlaybackSnapshot(token)
         if (snapshotResult.status == 204) return
@@ -532,12 +536,15 @@ class MainActivity : AppCompatActivity() {
         playbackStatus.text = message
     }
 
-    private fun transitionActive(message: String) {
+    private fun transitionActive(startMonitoring: Boolean) {
         session = session.copy(activationState = ActivationState.ACTIVE)
         persistRuntimeState()
         renderPlaybackControls()
-        startMonitorLoop()
-        playbackStatus.text = message
+        if (startMonitoring) {
+            startMonitorLoop()
+        } else {
+            stopMonitorLoop()
+        }
     }
 
     private fun stopSession(message: String) {
@@ -635,19 +642,36 @@ class MainActivity : AppCompatActivity() {
         reattachButton.isEnabled = detached
     }
 
-    private fun restoreSessionMonitoringIfNeeded() {
-        if (session.activationState != ActivationState.ACTIVE) return
-        if (session.queue.isEmpty() || session.currentUri.isNullOrBlank()) {
-            stopSession("Restored session is incomplete. Start or reattach to continue.")
+    private suspend fun restoreSessionMonitoringIfNeeded() {
+        val restoredState = session.activationState
+        if (restoredState == ActivationState.INACTIVE) return
+
+        val current = session.queue.getOrNull(session.index)
+        if (current == null) {
+            session = SessionState()
+            clearRuntimeState()
+            renderQueue()
+            renderPlaybackControls()
+            playbackStatus.text = "No active session."
             return
         }
-        if (getToken() == null) {
-            transitionDetached("Spotify session expired. Reconnect.")
-            return
-        }
+
+        session = session.copy(currentUri = current.uri)
+        persistRuntimeState()
+        renderQueue()
         renderPlaybackControls()
-        startMonitorLoop()
-        playbackStatus.text = "Restored active session."
+        playbackStatus.text = formatNowPlayingStatus(current)
+
+        if (restoredState == ActivationState.ACTIVE) {
+            val token = getUsableAccessToken()
+            if (token == null) {
+                handleExpiredApiSession()
+                return
+            }
+            startMonitorLoop()
+        } else {
+            stopMonitorLoop()
+        }
     }
 
     private suspend fun fetchCurrentPlaybackSnapshot(token: String): PlaybackSnapshotResult {
@@ -934,7 +958,7 @@ class MainActivity : AppCompatActivity() {
     private fun handleExpiredApiSession() {
         clearAuth()
         refreshAuthStatus()
-        val message = "Spotify session expired. Reconnect."
+        val message = "Spotify session expired. Please reconnect."
         if (session.activationState == ActivationState.ACTIVE || session.activationState == ActivationState.DETACHED) {
             transitionDetached(message)
         } else {
@@ -1149,7 +1173,7 @@ class MainActivity : AppCompatActivity() {
     private fun spotifyStatusMessage(status: Int): String {
         return when (status) {
             400 -> "request was invalid"
-            401 -> "Spotify session expired. Reconnect."
+            401 -> "Spotify session expired. Please reconnect."
             403 -> "Spotify denied permission for this action"
             404 -> "Spotify player or item was not found"
             429 -> "Spotify rate limited this request"
