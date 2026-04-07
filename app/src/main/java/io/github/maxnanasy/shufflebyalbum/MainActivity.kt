@@ -479,7 +479,7 @@ class MainActivity : AppCompatActivity() {
 
     private suspend fun monitorPlayback() {
         if (session.activationState != ActivationState.ACTIVE || session.currentUri == null) return
-        val token = getUsableAccessToken() ?: return transitionDetached("Spotify session expired. Reconnect.")
+        val token = getUsableAccessToken() ?: return transitionDetached("Spotify session expired. Please reconnect.")
 
         val snapshotResult = fetchCurrentPlaybackSnapshot(token)
         if (snapshotResult.status == 204) return
@@ -958,7 +958,7 @@ class MainActivity : AppCompatActivity() {
     private fun handleExpiredApiSession() {
         clearAuth()
         refreshAuthStatus()
-        val message = "Spotify session expired. Reconnect."
+        val message = "Spotify session expired. Please reconnect."
         if (session.activationState == ActivationState.ACTIVE || session.activationState == ActivationState.DETACHED) {
             transitionDetached(message)
         } else {
@@ -1173,7 +1173,7 @@ class MainActivity : AppCompatActivity() {
     private fun spotifyStatusMessage(status: Int): String {
         return when (status) {
             400 -> "request was invalid"
-            401 -> "Spotify session expired. Reconnect."
+            401 -> "Spotify session expired. Please reconnect."
             403 -> "Spotify denied permission for this action"
             404 -> "Spotify player or item was not found"
             429 -> "Spotify rate limited this request"
