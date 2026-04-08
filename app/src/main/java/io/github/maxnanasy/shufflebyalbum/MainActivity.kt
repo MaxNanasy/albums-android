@@ -88,7 +88,7 @@ class MainActivity : AppCompatActivity() {
         restoreRuntimeState()
 
         appScope.launch {
-            bootstrapAuthState(intent?.data)
+            ensureUsableStartupAuth(intent?.data)
             renderItemList()
             renderQueue()
             renderPlaybackControls()
@@ -203,7 +203,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private suspend fun bootstrapAuthState(uri: Uri?) {
+    private suspend fun ensureUsableStartupAuth(uri: Uri?) {
         if (processAuthRedirect(uri)) {
             return
         }
@@ -489,19 +489,19 @@ class MainActivity : AppCompatActivity() {
                     cooldownKey = "monitor-failure-detached",
                 )
             } else {
-                playbackStatus.text = "Playback monitoring temporary error: $failure."
+                playbackStatus.text = "Unable to check playback state right now."
                 reportError(
-                    toastMessage = "Playback monitoring temporary error: $failure.",
+                    toastMessage = "Playback monitor encountered an error.",
                     cooldownKey = "monitor-failure-recoverable",
                 )
             }
             return
         }
         val snapshot = snapshotResult.snapshot ?: run {
-            playbackStatus.text = "Playback monitoring temporary error: Spotify returned an empty status payload."
+            playbackStatus.text = "Unable to check playback state right now."
             reportError(
-                toastMessage = "Playback monitoring temporary error: Spotify returned an empty status payload.",
-                cooldownKey = "monitor-empty-payload",
+                toastMessage = "Playback monitor encountered an error.",
+                cooldownKey = "monitor-failure-recoverable",
             )
             return
         }
@@ -1234,7 +1234,7 @@ class MainActivity : AppCompatActivity() {
         private const val KEY_ITEMS = "shuffle-by-album.items"
         private const val KEY_RUNTIME = "shuffle-by-album.runtime"
         private const val UNDO_BANNER_DURATION_MS = 5_000L
-        private const val ERROR_TOAST_COOLDOWN_MS = 8_000L
+        private const val ERROR_TOAST_COOLDOWN_MS = 45_000L
     }
 }
 
