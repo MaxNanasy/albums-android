@@ -7,7 +7,8 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical">
+        android:orientation="vertical"
+        android:padding="8dp">
 
         <TextView
             android:layout_width="match_parent"
@@ -19,190 +20,226 @@
             android:layout_height="wrap_content"
             android:text="Randomly cycles through your saved set of Spotify albums/playlists while keeping each item's tracks in order." />
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="1) Connect Spotify" />
-
         <LinearLayout
-            style="?android:attr/buttonBarStyle"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal">
+            android:layout_marginTop="8dp"
+            android:background="@drawable/default_border"
+            android:orientation="vertical"
+            android:padding="8dp">
 
-            <Button
-                style="?android:attr/buttonBarButtonStyle"
-                android:id="@+id/loginButton"
-                android:layout_width="0dp"
+            <TextView
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Connect" />
+                android:text="1) Connect Spotify" />
 
-            <Button
-                style="?android:attr/buttonBarButtonStyle"
-                android:id="@+id/logoutButton"
-                android:layout_width="0dp"
+            <LinearLayout
+                style="?android:attr/buttonBarStyle"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Disconnect" />
+                android:orientation="horizontal">
+
+                <Button
+                    style="?android:attr/buttonBarButtonStyle"
+                    android:id="@+id/loginButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Connect" />
+
+                <Button
+                    style="?android:attr/buttonBarButtonStyle"
+                    android:id="@+id/logoutButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Disconnect" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/authStatus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Not connected." />
         </LinearLayout>
 
-        <TextView
-            android:id="@+id/authStatus"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Not connected." />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="2) Manage Album/Playlist List" />
-
-        <EditText
-            android:id="@+id/itemUriInput"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="spotify:album:... or spotify:playlist:..."
-            android:importantForAutofill="no"
-            android:imeOptions="actionDone"
-            android:inputType="textUri" />
-
         <LinearLayout
-            style="?android:attr/buttonBarStyle"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal">
+            android:layout_marginTop="8dp"
+            android:background="@drawable/default_border"
+            android:orientation="vertical"
+            android:padding="8dp">
 
-            <Button
-                style="?android:attr/buttonBarButtonStyle"
-                android:id="@+id/addButton"
-                android:layout_width="0dp"
+            <TextView
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Add" />
+                android:text="2) Manage Album/Playlist List" />
 
-            <Button
-                style="?android:attr/buttonBarButtonStyle"
-                android:id="@+id/importPlaylistButton"
-                android:layout_width="0dp"
+            <EditText
+                android:id="@+id/itemUriInput"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Import Albums" />
+                android:hint="spotify:album:... or spotify:playlist:..."
+                android:importantForAutofill="no"
+                android:imeOptions="actionDone"
+                android:inputType="textUri" />
+
+            <LinearLayout
+                style="?android:attr/buttonBarStyle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <Button
+                    style="?android:attr/buttonBarButtonStyle"
+                    android:id="@+id/addButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Add" />
+
+                <Button
+                    style="?android:attr/buttonBarButtonStyle"
+                    android:id="@+id/importPlaylistButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Import Albums" />
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Tip: You can paste a normal Spotify URL and it will be converted. For playlist imports, you can also paste a playlist ID." />
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/itemRecycler"
+                android:layout_width="match_parent"
+                android:layout_height="220dp" />
+
+            <LinearLayout
+                android:id="@+id/undoBannerContainer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
         </LinearLayout>
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Tip: You can paste a normal Spotify URL and it will be converted. For playlist imports, you can also paste a playlist ID." />
-
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/itemRecycler"
-            android:layout_width="match_parent"
-            android:layout_height="220dp" />
-
         <LinearLayout
-            android:id="@+id/undoBannerContainer"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical" />
+            android:layout_marginTop="8dp"
+            android:background="@drawable/default_border"
+            android:orientation="vertical"
+            android:padding="8dp">
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="3) Start Shuffle Session" />
-
-        <LinearLayout
-            style="?android:attr/buttonBarStyle"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal">
-
-            <Button
-                style="?android:attr/buttonBarButtonStyle"
-                android:id="@+id/startButton"
-                android:layout_width="wrap_content"
+            <TextView
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Start" />
+                android:text="3) Start Shuffle Session" />
 
-            <Button
-                style="?android:attr/buttonBarButtonStyle"
-                android:id="@+id/reattachButton"
-                android:layout_width="wrap_content"
+            <LinearLayout
+                style="?android:attr/buttonBarStyle"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Reattach"
-                android:visibility="gone" />
+                android:orientation="horizontal">
 
-            <Button
-                style="?android:attr/buttonBarButtonStyle"
-                android:id="@+id/skipButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Skip" />
+                <Button
+                    style="?android:attr/buttonBarButtonStyle"
+                    android:id="@+id/startButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Start" />
 
-            <Button
-                style="?android:attr/buttonBarButtonStyle"
-                android:id="@+id/stopButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Stop" />
+                <Button
+                    style="?android:attr/buttonBarButtonStyle"
+                    android:id="@+id/reattachButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Reattach"
+                    android:visibility="gone" />
+
+                <Button
+                    style="?android:attr/buttonBarButtonStyle"
+                    android:id="@+id/skipButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Skip" />
+
+                <Button
+                    style="?android:attr/buttonBarButtonStyle"
+                    android:id="@+id/stopButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Stop" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/playbackStatus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/queueRecycler"
+                android:layout_width="match_parent"
+                android:layout_height="220dp" />
         </LinearLayout>
 
-        <TextView
-            android:id="@+id/playbackStatus"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content" />
-
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/queueRecycler"
-            android:layout_width="match_parent"
-            android:layout_height="220dp" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="4) Import / Export Data" />
-
         <LinearLayout
-            style="?android:attr/buttonBarStyle"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal">
+            android:layout_marginTop="8dp"
+            android:background="@drawable/default_border"
+            android:orientation="vertical"
+            android:padding="8dp">
 
-            <Button
-                style="?android:attr/buttonBarButtonStyle"
-                android:id="@+id/exportStorageButton"
-                android:layout_width="0dp"
+            <TextView
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Export Data JSON" />
+                android:text="4) Import / Export Data" />
 
-            <Button
-                style="?android:attr/buttonBarButtonStyle"
-                android:id="@+id/importStorageButton"
-                android:layout_width="0dp"
+            <LinearLayout
+                style="?android:attr/buttonBarStyle"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Import Data JSON" />
+                android:orientation="horizontal">
+
+                <Button
+                    style="?android:attr/buttonBarButtonStyle"
+                    android:id="@+id/exportStorageButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Export Data JSON" />
+
+                <Button
+                    style="?android:attr/buttonBarButtonStyle"
+                    android:id="@+id/importStorageButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Import Data JSON" />
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Data JSON" />
+
+            <EditText
+                android:id="@+id/storageJsonInput"
+                android:layout_width="match_parent"
+                android:layout_height="180dp"
+                android:gravity="top|start"
+                android:hint="{&quot;shuffle-by-album.items&quot;:[{&quot;type&quot;:&quot;album&quot;,&quot;uri&quot;:..."
+                android:importantForAutofill="no"
+                android:inputType="textMultiLine"
+                android:scrollbars="vertical" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Export copies your saved items into the text box. Import replaces saved items with the data in the text box." />
         </LinearLayout>
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Data JSON" />
-
-        <EditText
-            android:id="@+id/storageJsonInput"
-            android:layout_width="match_parent"
-            android:layout_height="180dp"
-            android:gravity="top|start"
-            android:hint="{&quot;shuffle-by-album.items&quot;:[{&quot;type&quot;:&quot;album&quot;,&quot;uri&quot;:..."
-            android:importantForAutofill="no"
-            android:inputType="textMultiLine"
-            android:scrollbars="vertical" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Export copies your saved items into the text box. Import replaces saved items with the data in the text box." />
     </LinearLayout>
 </ScrollView>
