@@ -98,19 +98,6 @@ These should continue transitioning the session to detached state, but the text 
 4. Preserve current invalid-input and no-auth gating behavior, subject to the text changes described in the text-normalization plan.
 5. Preserve current failure handling semantics except for copy changes; this plan is about progress behavior and keeping failure flow aligned with the web model.
 
-### 5. Regression coverage
-
-Add or update tests for the following scenarios:
-
-1. Startup with valid access token -> no restore-specific messaging.
-2. Startup with expired access token + valid refresh token + successful refresh -> connected state, no restore toast.
-3. Startup with expired access token + refresh HTTP failure -> no restore-specific toast/status.
-4. Startup with expired access token + refresh network failure -> generic auth validation failure UI only.
-5. Repeated keyed errors at t=0, t=10s, t=20s, t=50s -> only the first and the post-45-second error surface.
-6. Recoverable monitor failure -> session remains active and uses generic monitor failure UI.
-7. Unrecoverable monitor failure (401/403/404) -> session becomes detached.
-8. Playlist import start -> in-progress notification is shown before network work begins.
-
 ## Depends On
 
 - `normalize-android-copy-to-web-auth-playback-import`: Supplies the exact target strings for the normalized UI states in this plan.
