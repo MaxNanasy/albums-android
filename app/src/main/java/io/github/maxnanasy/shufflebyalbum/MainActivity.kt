@@ -218,11 +218,8 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        authStatus.text = "Restoring Spotify session..."
         val token = refreshSpotifyAccessToken()
         if (token == null) {
-            authStatus.text = "Spotify session restore failed. Connect again."
-            toast("Could not restore Spotify session. Please reconnect.")
             return
         }
         refreshAuthStatus()
@@ -245,7 +242,7 @@ class MainActivity : AppCompatActivity() {
         }
         val verifier = getStringPref(KEY_VERIFIER)
         if (verifier.isNullOrBlank()) {
-            authStatus.text = "Missing PKCE verifier. Connect again."
+            authStatus.text = "Missing PKCE verifier. Try connecting again."
             return true
         }
 
@@ -256,7 +253,6 @@ class MainActivity : AppCompatActivity() {
         saveToken(token)
         prefs.edit().remove(KEY_VERIFIER).apply()
         refreshAuthStatus()
-        toast("Connected to Spotify.")
         renderItemList()
         return true
     }
@@ -270,7 +266,7 @@ class MainActivity : AppCompatActivity() {
             return toast("Item is already in your list.")
         }
 
-        val token = getUsableAccessToken() ?: return toast("Connect Spotify first or reconnect if your session expired.")
+        val token = getUsableAccessToken() ?: return toast("Connect Spotify first so the app can load item titles.")
         val titled = withItemTitle(parsed, token)
             ?: return toast("Unable to load title for that item. Please try another URI.")
         items.add(titled)
@@ -281,9 +277,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private suspend fun importAlbumsFromPlaylist() {
-        val token = getUsableAccessToken() ?: return toast("Connect Spotify first or reconnect if your session expired.")
+        val token = getUsableAccessToken() ?: return toast("Connect Spotify first so the app can import albums.")
         val playlist = parseSpotifyPlaylistRef(itemUriInput.text.toString().trim())
             ?: return toast("Enter a valid Spotify playlist URL, URI, or playlist ID.")
+        toast("Importing albums from playlist...")
 
         val existing = getItems().toMutableList()
         val existingUris = existing.map { it.uri }.toMutableSet()
@@ -306,7 +303,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private suspend fun startShuffleSession() {
-        val token = getUsableAccessToken() ?: return toast("Connect Spotify first or reconnect if your session expired.")
+        val token = getUsableAccessToken() ?: return toast("Connect Spotify first.")
         val items = getItems()
         if (items.isEmpty()) return toast("Add at least one album or playlist first.")
 
@@ -524,7 +521,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         if (contextUri != session.currentUri) {
-            transitionDetached("Spotify is playing a different item. Reattach when ready.")
+            transitionDetached("Spotify is playing a different album/playlist than this app expects. Reattach to resume.")
         }
     }
 
@@ -845,16 +842,21 @@ class MainActivity : AppCompatActivity() {
         )
         val response = formPost("https://accounts.spotify.com/api/token", params)
         if (!response.ok || response.body == null) {
+            val refreshStatusMessage = if (response.failureReason != null) {
+                "Network issue refreshing Spotify session. Please reconnect if this continues."
+            } else {
+                "Unable to validate Spotify session. Please reconnect."
+            }
             reportError(
                 statusView = authStatus,
-                statusMessage = "Spotify token refresh failed: ${spotifyFailureMessage(response.status, response.failureReason)}.",
+                statusMessage = refreshStatusMessage,
             )
             return null
         }
         val token = parseTokenResponse(response.body) ?: run {
             reportError(
                 statusView = authStatus,
-                statusMessage = "Spotify token refresh failed: invalid token response.",
+                statusMessage = "Unable to validate Spotify session. Please reconnect.",
             )
             return null
         }
@@ -892,7 +894,7 @@ class MainActivity : AppCompatActivity() {
                 return PlaylistAlbumImportResult(
                     items = emptyList(),
                     fullyLoaded = false,
-                    failureMessage = response.describeFailure(),
+                    failureMessage = response.describePlaylistImportFailure(),
                 )
             }
             val body = JSONObject(response.body)
@@ -1172,13 +1174,13 @@ class MainActivity : AppCompatActivity() {
 
     private fun spotifyStatusMessage(status: Int): String {
         return when (status) {
-            400 -> "request was invalid"
+            400 -> "Network error while contacting Spotify. Please try again."
             401 -> "Spotify session expired. Please reconnect."
-            403 -> "Spotify denied permission for this action"
-            404 -> "Spotify player or item was not found"
-            429 -> "Spotify rate limited this request"
-            in 500..599 -> "Spotify service is temporarily unavailable"
-            else -> "status $status"
+            403 -> "Spotify permissions are missing. Disconnect and reconnect."
+            404 -> "Requested Spotify item or playback device was not found."
+            429 -> "Spotify rate limit reached. Please wait a moment and retry."
+            in 500..599 -> "Spotify is temporarily unavailable. Please try again shortly."
+            else -> "Network error while contacting Spotify. Please try again."
         }
     }
 
@@ -1191,11 +1193,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun normalizeNetworkError(reason: String): String {
-        return when (reason.lowercase()) {
-            "network unavailable" -> "network unavailable"
-            "network error" -> "network error"
-            else -> reason
-        }
+        return normalizeSpotifyNetworkError(reason)
     }
 
     private fun getStringPref(key: String): String? {
@@ -1306,27 +1304,35 @@ private data class PlaybackPreflightResult(
 )
 
 private fun HttpResult.describeFailure(): String {
-    failureReason?.let { return it }
+    failureReason?.let { return normalizeSpotifyNetworkError(it) }
     val statusPart = if (status >= 0) "status $status" else "request failed"
-    val detail = runCatching {
-        if (body.isNullOrBlank()) return@runCatching null
-        val json = JSONObject(body)
-        val errorObject = json.optJSONObject("error")
-        when {
-            errorObject != null -> errorObject.optString("message").ifBlank { null }
-            else -> json.optString("error_description").ifBlank {
-                json.optString("message").ifBlank { null }
-            }
-        }
-    }.getOrNull()
+    val detail = extractErrorDetail(body)
 
     return if (detail.isNullOrBlank()) statusPart else "$statusPart: $detail"
 }
 
+private fun HttpResult.describePlaylistImportFailure(): String {
+    if (status < 0) {
+        return normalizeSpotifyNetworkError(failureReason ?: "network error")
+    }
+    val details = extractErrorDetail(body)
+    return if (details.isNullOrBlank()) {
+        "Unable to import albums from that playlist (status $status). Please try again."
+    } else {
+        "Unable to import albums from that playlist (status $status). $details"
+    }
+}
+
 private fun PlaybackSnapshotResult.describeFailure(): String {
-    failureReason?.let { return it }
+    failureReason?.let { return normalizeSpotifyNetworkError(it) }
     val statusPart = if (status >= 0) "status $status" else "request failed"
-    val detail = runCatching {
+    val detail = extractErrorDetail(body)
+
+    return if (detail.isNullOrBlank()) statusPart else "$statusPart: $detail"
+}
+
+private fun extractErrorDetail(body: String?): String? {
+    return runCatching {
         if (body.isNullOrBlank()) return@runCatching null
         val json = JSONObject(body)
         val errorObject = json.optJSONObject("error")
@@ -1337,8 +1343,13 @@ private fun PlaybackSnapshotResult.describeFailure(): String {
             }
         }
     }.getOrNull()
+}
 
-    return if (detail.isNullOrBlank()) statusPart else "$statusPart: $detail"
+private fun normalizeSpotifyNetworkError(reason: String): String {
+    return when (reason.lowercase()) {
+        "network unavailable", "network error" -> "Network error while contacting Spotify. Please try again."
+        else -> "Network error while contacting Spotify. Please try again."
+    }
 }
 
 private fun networkFailureReason(error: Exception): String {

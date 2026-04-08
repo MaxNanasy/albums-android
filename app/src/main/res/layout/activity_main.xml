@@ -21,7 +21,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:text="Randomly cycles through your saved Spotify albums/playlists while keeping each item’s tracks in order." />
+            android:text="Randomly cycles through your saved set of Spotify albums/playlists while keeping each item's tracks in order." />
 
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
@@ -125,6 +125,12 @@
                         android:layout_weight="1"
                         android:text="Import Albums" />
                 </LinearLayout>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="Tip: You can paste a normal Spotify URL and it will be converted. For playlist imports, you can also paste a playlist ID." />
 
                 <androidx.recyclerview.widget.RecyclerView
                     android:id="@+id/itemRecycler"
