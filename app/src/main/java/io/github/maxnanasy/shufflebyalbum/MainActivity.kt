@@ -109,13 +109,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    override fun onStart() {
-        super.onStart()
-        if (getToken() != null) {
-            connectAppRemote()
-        }
-    }
-
     override fun onStop() {
         disconnectAppRemote()
         super.onStop()
@@ -229,6 +222,10 @@ class MainActivity : AppCompatActivity() {
             return
         }
         if (connectingAppRemote) return
+        if (!SpotifyAppRemote.isSpotifyInstalled(this)) {
+            onFailure?.invoke(IllegalStateException("Spotify app is not installed"))
+            return
+        }
 
         connectingAppRemote = true
 
@@ -237,23 +234,29 @@ class MainActivity : AppCompatActivity() {
             .showAuthView(false)
             .build()
 
-        SpotifyAppRemote.connect(
-            this,
-            params,
-            object : Connector.ConnectionListener {
-                override fun onConnected(remote: SpotifyAppRemote) {
-                    connectingAppRemote = false
-                    spotifyAppRemote = remote
-                    onConnected?.invoke()
-                }
+        try {
+            SpotifyAppRemote.connect(
+                this,
+                params,
+                object : Connector.ConnectionListener {
+                    override fun onConnected(remote: SpotifyAppRemote) {
+                        connectingAppRemote = false
+                        spotifyAppRemote = remote
+                        onConnected?.invoke()
+                    }
 
-                override fun onFailure(error: Throwable) {
-                    connectingAppRemote = false
-                    spotifyAppRemote = null
-                    onFailure?.invoke(error)
-                }
-            },
-        )
+                    override fun onFailure(error: Throwable) {
+                        connectingAppRemote = false
+                        spotifyAppRemote = null
+                        onFailure?.invoke(error)
+                    }
+                },
+            )
+        } catch (t: Throwable) {
+            connectingAppRemote = false
+            spotifyAppRemote = null
+            onFailure?.invoke(t)
+        }
     }
 
     private fun disconnectAppRemote() {
