@@ -7,7 +7,6 @@
     <dimen name="button_group_horizontal_spacing">8dp</dimen>
     <dimen name="item_list_height">220dp</dimen>
     <dimen name="storage_json_editor_height">180dp</dimen>
-    <dimen name="queue_row_padding">8dp</dimen>
     <dimen name="item_row_padding">8dp</dimen>
     <dimen name="undo_banner_bottom_spacing">8dp</dimen>
     <dimen name="undo_banner_content_padding">12dp</dimen>
