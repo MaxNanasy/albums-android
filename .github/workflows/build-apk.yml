@@ -1,0 +1,40 @@
+name: Build APK
+
+on:
+  push:
+    branches:
+      - '**'
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: APK build variant to run
+        required: true
+        default: debug
+        type: choice
+        options:
+          - debug
+          - release
+
+jobs:
+  debug-build:
+    # Do debug builds for non-main pushes, or manual runs that explicitly choose debug.
+    if: >-
+      (github.event_name == 'push' && github.ref != 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' && inputs.build_type == 'debug')
+    uses: ./.github/workflows/build-apk-common.yml
+    with:
+      variant: debug
+    secrets: inherit
+
+  release-build:
+    # Do release builds for main pushes, or manual runs that choose release on the main branch only.
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (
+        (github.event_name == 'push') ||
+        (github.event_name == 'workflow_dispatch' && inputs.build_type == 'release')
+      )
+    uses: ./.github/workflows/build-apk-common.yml
+    with:
+      variant: release
+    secrets: inherit

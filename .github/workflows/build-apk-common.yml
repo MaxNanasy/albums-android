@@ -1,0 +1,140 @@
+name: Build APK Common (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      variant:
+        description: Build variant (debug or release)
+        required: true
+        type: string
+
+jobs:
+  build-apk-common:
+    runs-on: ubuntu-24.04
+    env:
+      # Use fresh SDK root for build stability
+      ANDROID_SDK_ROOT: ${{ github.workspace }}/.android-sdk
+      ANDROID_HOME: ${{ github.workspace }}/.android-sdk
+
+    steps:
+      - name: Resolve variant-derived settings and signing secrets
+        env:
+          VARIANT: ${{ inputs.variant }}
+          RUN_ID: ${{ github.run_id }}
+          DEBUG_KEYSTORE_BASE64: ${{ secrets.DEBUG_KEYSTORE_BASE64 }}
+          DEBUG_KEYSTORE_PASSWORD: ${{ secrets.DEBUG_KEYSTORE_PASSWORD }}
+          DEBUG_KEY_ALIAS: ${{ secrets.DEBUG_KEY_ALIAS }}
+          DEBUG_KEY_PASSWORD: ${{ secrets.DEBUG_KEY_PASSWORD }}
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ "$VARIANT" != "debug" ] && [ "$VARIANT" != "release" ]; then
+            echo "Invalid variant: '$VARIANT'. Expected 'debug' or 'release'."
+            exit 1
+          fi
+
+          variant_capitalized="$(printf '%s' "$VARIANT" | awk '{print toupper(substr($0,1,1)) substr($0,2)}')"
+          variant_upper="$(printf '%s' "$VARIANT" | tr '[:lower:]' '[:upper:]')"
+
+          echo "KEYSTORE_FILENAME=${VARIANT}-signing.jks" >> "$GITHUB_ENV"
+          echo "GRADLE_TASK=assemble${variant_capitalized}" >> "$GITHUB_ENV"
+          echo "APK_FILENAME=app-${VARIANT}-${RUN_ID}.apk" >> "$GITHUB_ENV"
+          echo "ARTIFACT_NAME=app-${VARIANT}-${RUN_ID}" >> "$GITHUB_ENV"
+
+          resolved_keystore_base64_var="${variant_upper}_KEYSTORE_BASE64"
+          resolved_keystore_password_var="${variant_upper}_KEYSTORE_PASSWORD"
+          resolved_key_alias_var="${variant_upper}_KEY_ALIAS"
+          resolved_key_password_var="${variant_upper}_KEY_PASSWORD"
+
+          resolved_keystore_base64="${!resolved_keystore_base64_var}"
+          resolved_keystore_password="${!resolved_keystore_password_var}"
+          resolved_key_alias="${!resolved_key_alias_var}"
+          resolved_key_password="${!resolved_key_password_var}"
+
+          expected_keystore_base64_secret_name="$resolved_keystore_base64_var"
+          expected_keystore_password_secret_name="$resolved_keystore_password_var"
+          expected_key_alias_secret_name="$resolved_key_alias_var"
+
+          check_required_secret() {
+            local required_secret="$1"
+            local required_value="$2"
+            if [ -z "$required_value" ]; then
+              echo "Missing required secret: ${required_secret}"
+              exit 1
+            fi
+          }
+
+          check_required_secret "$expected_keystore_base64_secret_name" "$resolved_keystore_base64"
+          check_required_secret "$expected_keystore_password_secret_name" "$resolved_keystore_password"
+          check_required_secret "$expected_key_alias_secret_name" "$resolved_key_alias"
+
+          echo "KEYSTORE_BASE64=$resolved_keystore_base64" >> "$GITHUB_ENV"
+          echo "KEYSTORE_PASSWORD=$resolved_keystore_password" >> "$GITHUB_ENV"
+          echo "KEY_ALIAS=$resolved_key_alias" >> "$GITHUB_ENV"
+          echo "KEY_PASSWORD=$resolved_key_password" >> "$GITHUB_ENV"
+
+          if [ -n "$resolved_key_password" ]; then
+            echo "Using $resolved_key_password_var for EFFECTIVE_SIGNING_KEY_PASSWORD."
+            echo "EFFECTIVE_SIGNING_KEY_PASSWORD=$resolved_key_password" >> "$GITHUB_ENV"
+          else
+            echo "$resolved_key_password_var not set. Using $resolved_keystore_password_var for EFFECTIVE_SIGNING_KEY_PASSWORD."
+            echo "EFFECTIVE_SIGNING_KEY_PASSWORD=$resolved_keystore_password" >> "$GITHUB_ENV"
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Set up keystore
+        env:
+          KEYSTORE_BASE64: ${{ env.KEYSTORE_BASE64 }}
+          KEYSTORE_PATH: ${{ runner.temp }}/${{ env.KEYSTORE_FILENAME }}
+          KEYSTORE_PASSWORD: ${{ env.KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ env.KEY_PASSWORD }}
+          VARIANT: ${{ inputs.variant }}
+        run: |
+          set -euo pipefail
+          printf %s "$KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
+
+      - name: Build APK
+        env:
+          SIGNING_STORE_FILE: ${{ runner.temp }}/${{ env.KEYSTORE_FILENAME }}
+          SIGNING_STORE_PASSWORD: ${{ env.KEYSTORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ env.KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ env.EFFECTIVE_SIGNING_KEY_PASSWORD }}
+          APP_VERSION_NAME: ${{ github.run_id }}
+        run: ./gradlew --no-daemon -PappVersionName="${APP_VERSION_NAME}" ${{ env.GRADLE_TASK }}
+
+      - name: Prepare APK artifact payload
+        env:
+          VARIANT: ${{ inputs.variant }}
+          APK_FILENAME: ${{ env.APK_FILENAME }}
+        run: |
+          set -euo pipefail
+          source_apk="$(find "app/build/outputs/apk/${VARIANT}" -maxdepth 1 -type f -name '*.apk' | head -n 1)"
+          if [ -z "$source_apk" ]; then
+            echo "No APK found for variant ${VARIANT}."
+            exit 1
+          fi
+
+          cp "$source_apk" "${RUNNER_TEMP}/${APK_FILENAME}"
+          echo "ARTIFACT_PATH=${RUNNER_TEMP}/${APK_FILENAME}" >> "$GITHUB_ENV"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: ${{ env.ARTIFACT_PATH }}
+          retention-days: 1

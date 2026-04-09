@@ -1,0 +1,51 @@
+name: Codex Co-Author Trailer Check
+
+on:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+
+jobs:
+  verify-codex-coauthor-trailer:
+    if: startsWith(github.event.pull_request.head.ref, 'codex/')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout with full history
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Verify commit trailers
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          mapfile -t commits < <(git rev-list --reverse "${BASE_SHA}..${HEAD_SHA}")
+
+          if [ "${#commits[@]}" -eq 0 ]; then
+            echo "No commits found between ${BASE_SHA} and ${HEAD_SHA}."
+            exit 0
+          fi
+
+          missing=0
+
+          for commit in "${commits[@]}"; do
+            message="$(git show -s --format=%B "$commit")"
+
+            if ! printf '%s\n' "$message" | grep -q '^Co-Authored-By: Codex <codex@openai.com>$'; then
+              echo "Commit $commit is missing required trailer: Co-Authored-By: Codex <codex@openai.com>"
+              missing=1
+            fi
+          done
+
+          if [ "$missing" -ne 0 ]; then
+            echo "One or more commits are missing the required trailer."
+            exit 1
+          fi
+
+          echo "All commits include the required Codex co-author trailer."
