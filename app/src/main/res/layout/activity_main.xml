@@ -136,7 +136,8 @@
                     android:id="@+id/itemRecycler"
                     android:layout_width="match_parent"
                     android:layout_height="@dimen/item_list_height"
-                    android:layout_marginTop="@dimen/control_vertical_spacing" />
+                    android:layout_marginTop="@dimen/control_vertical_spacing"
+                    android:background="@drawable/list_container_border" />
 
                 <LinearLayout
                     android:id="@+id/undoBannerContainer"
@@ -214,7 +215,8 @@
                     android:id="@+id/queueRecycler"
                     android:layout_width="match_parent"
                     android:layout_height="@dimen/item_list_height"
-                    android:layout_marginTop="@dimen/control_vertical_spacing" />
+                    android:layout_marginTop="@dimen/control_vertical_spacing"
+                    android:background="@drawable/list_container_border" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 

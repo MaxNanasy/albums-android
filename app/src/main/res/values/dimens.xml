@@ -9,6 +9,9 @@
     <dimen name="storage_json_editor_height">180dp</dimen>
     <dimen name="queue_row_padding">8dp</dimen>
     <dimen name="item_row_padding">8dp</dimen>
+    <dimen name="list_item_spacing">8dp</dimen>
+    <dimen name="list_item_corner_radius">10dp</dimen>
+    <dimen name="list_container_corner_radius">12dp</dimen>
     <dimen name="undo_banner_bottom_spacing">8dp</dimen>
     <dimen name="undo_banner_content_padding">12dp</dimen>
 </resources>

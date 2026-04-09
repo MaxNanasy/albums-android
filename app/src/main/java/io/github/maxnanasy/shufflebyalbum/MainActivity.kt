@@ -3,6 +3,7 @@ package io.github.maxnanasy.shufflebyalbum
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import android.graphics.Rect
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
@@ -130,13 +131,16 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupLists() {
+        val spacing = resources.getDimensionPixelSize(R.dimen.list_item_spacing)
         findViewById<RecyclerView>(R.id.itemRecycler).apply {
             layoutManager = LinearLayoutManager(this@MainActivity)
             adapter = itemAdapter
+            addItemDecoration(VerticalListSpacingDecoration(spacing))
         }
         findViewById<RecyclerView>(R.id.queueRecycler).apply {
             layoutManager = LinearLayoutManager(this@MainActivity)
             adapter = queueAdapter
+            addItemDecoration(VerticalListSpacingDecoration(spacing))
         }
     }
 
@@ -1440,5 +1444,21 @@ private class QueueAdapter : RecyclerView.Adapter<QueueAdapter.QueueViewHolder>(
 
     class QueueViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         val title: TextView = itemView.findViewById(R.id.queueTitle)
+    }
+}
+
+private class VerticalListSpacingDecoration(
+    private val spacingPx: Int,
+) : RecyclerView.ItemDecoration() {
+    override fun getItemOffsets(
+        outRect: Rect,
+        view: View,
+        parent: RecyclerView,
+        state: RecyclerView.State,
+    ) {
+        val position = parent.getChildAdapterPosition(view)
+        if (position == RecyclerView.NO_POSITION) return
+        outRect.top = if (position == 0) spacingPx else 0
+        outRect.bottom = spacingPx
     }
 }
