@@ -109,8 +109,19 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    override fun onDestroy() {
+    override fun onStart() {
+        super.onStart()
+        if (getToken() != null) {
+            connectAppRemote()
+        }
+    }
+
+    override fun onStop() {
         disconnectAppRemote()
+        super.onStop()
+    }
+
+    override fun onDestroy() {
         super.onDestroy()
         stopMonitorLoop()
         appScope.cancel()
@@ -223,7 +234,7 @@ class MainActivity : AppCompatActivity() {
 
         val params = ConnectionParams.Builder(SPOTIFY_APP_ID)
             .setRedirectUri(REDIRECT_URI)
-            .showAuthView(true)
+            .showAuthView(false)
             .build()
 
         SpotifyAppRemote.connect(
@@ -275,22 +286,25 @@ class MainActivity : AppCompatActivity() {
 
     private suspend fun processAuthRedirect(uri: Uri?): Boolean {
         if (uri == null || uri.scheme != "shufflebyalbum") return false
+
+        val verifier = getStringPref(KEY_VERIFIER)
+        val code = uri.getQueryParameter("code")
         val error = uri.getQueryParameter("error")
+
+        if (verifier.isNullOrBlank()) {
+            return false
+        }
+
         if (error != null) {
             authStatus.text = "Spotify authorization error: $error"
             prefs.edit().remove(KEY_VERIFIER).apply()
             return true
         }
-        val code = uri.getQueryParameter("code")
+
         if (code.isNullOrBlank()) {
             authStatus.text = "Spotify authorization failed: missing authorization code."
             reportError(toastMessage = "Spotify login did not return an authorization code.")
             prefs.edit().remove(KEY_VERIFIER).apply()
-            return true
-        }
-        val verifier = getStringPref(KEY_VERIFIER)
-        if (verifier.isNullOrBlank()) {
-            authStatus.text = "Missing PKCE verifier. Try connecting again."
             return true
         }
 
@@ -301,14 +315,6 @@ class MainActivity : AppCompatActivity() {
         saveToken(token)
         prefs.edit().remove(KEY_VERIFIER).apply()
         refreshAuthStatus()
-        connectAppRemote(
-            onFailure = {
-                runOnUiThread {
-                    playbackStatus.text =
-                        "Connected to Spotify account, but could not attach to the Spotify app on this device."
-                }
-            },
-        )
         renderItemList()
         return true
     }
@@ -1293,6 +1299,7 @@ class MainActivity : AppCompatActivity() {
             "user-read-playback-state",
             "playlist-read-private",
             "playlist-read-collaborative",
+            "app-remote-control",
         )
 
         private const val KEY_VERIFIER = "shuffle-by-album.pkceVerifier"
