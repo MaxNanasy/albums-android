@@ -357,25 +357,22 @@ class MainActivity : AppCompatActivity() {
 
     private suspend fun processAuthRedirect(uri: Uri?): Boolean {
         if (uri == null || uri.scheme != "shufflebyalbum") return false
-
-        val verifier = getStringPref(KEY_VERIFIER)
-        val code = uri.getQueryParameter("code")
         val error = uri.getQueryParameter("error")
-
-        if (verifier.isNullOrBlank()) {
-            return false
-        }
-
         if (error != null) {
             authStatus.text = "Spotify authorization error: $error"
             prefs.edit().remove(KEY_VERIFIER).apply()
             return true
         }
-
+        val code = uri.getQueryParameter("code")
         if (code.isNullOrBlank()) {
             authStatus.text = "Spotify authorization failed: missing authorization code."
             reportError(toastMessage = "Spotify login did not return an authorization code.")
             prefs.edit().remove(KEY_VERIFIER).apply()
+            return true
+        }
+        val verifier = getStringPref(KEY_VERIFIER)
+        if (verifier.isNullOrBlank()) {
+            authStatus.text = "Missing PKCE verifier. Try connecting again."
             return true
         }
 
