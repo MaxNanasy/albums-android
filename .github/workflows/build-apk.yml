@@ -17,9 +17,9 @@ on:
 
 jobs:
   debug-build:
-    # Do debug builds for non-migrate-from-webapp pushes, or manual runs that explicitly choose debug.
+    # Do debug builds for non-main pushes, or manual runs that explicitly choose debug.
     if: >-
-      (github.event_name == 'push' && github.ref != 'refs/heads/migrate-from-webapp') ||
+      (github.event_name == 'push' && github.ref != 'refs/heads/main') ||
       (github.event_name == 'workflow_dispatch' && inputs.build_type == 'debug')
     uses: ./.github/workflows/build-apk-common.yml
     with:
@@ -27,9 +27,9 @@ jobs:
     secrets: inherit
 
   release-build:
-    # Do release builds for migrate-from-webapp pushes, or manual runs that choose release on the migrate-from-webapp branch only.
+    # Do release builds for main pushes, or manual runs that choose release on the main branch only.
     if: >-
-      github.ref == 'refs/heads/migrate-from-webapp' &&
+      github.ref == 'refs/heads/main' &&
       (
         (github.event_name == 'push') ||
         (github.event_name == 'workflow_dispatch' && inputs.build_type == 'release')
