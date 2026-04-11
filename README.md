@@ -1,7 +1,5 @@
-# Shuffle By Album (Android)
+# Shuffle By Album
 
-## Spotify integration notes
+An Android app that lets you maintain a list of albums and playlists, then lets you shuffle between them, playing each album/playlist in track order before advancing to the next
 
-- Spotify app ID is currently hardcoded as `5082b1452bc24cc3a0955f2d1c4e5560`
-- Redirect URI is `shufflebyalbum://callback`
-  - Ensure this redirect URI is allowed by your Spotify app settings
+See also [webapp version](https://github.com/MaxNanasy/albums-web)
