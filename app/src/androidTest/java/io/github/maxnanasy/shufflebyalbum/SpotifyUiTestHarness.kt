@@ -8,7 +8,6 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.spotify.android.appremote.api.AppRemote
 import com.spotify.android.appremote.api.PlayerApi
 import com.spotify.protocol.client.CallResult
-import com.spotify.protocol.client.PendingResult
 import com.spotify.protocol.types.Types
 import java.io.IOException
 import java.lang.reflect.Proxy
@@ -254,15 +253,14 @@ private class ImmediateCallResult<T>(
     private val value: T? = null,
     private val error: Throwable? = null,
 ) : CallResult<T>(Types.RequestId.NONE) {
+    init {
+        error?.let(::deliverError)
+    }
+
     override fun setResultCallback(callback: CallResult.ResultCallback<T>): CallResult<T> {
         if (error == null) {
             callback.onResult(value)
         }
-        return this
-    }
-
-    override fun setErrorCallback(errorCallback: PendingResult.ErrorCallback): PendingResult<T> {
-        error?.let(errorCallback::onError)
         return this
     }
 }
