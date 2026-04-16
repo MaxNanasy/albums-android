@@ -35,19 +35,16 @@ class AddPlusStartUiTest : AbstractUiTestCase() {
             },
         )
 
-        val scenario = launchMainActivity()
-        try {
-            onView(withId(R.id.itemUriInput)).perform(
-                replaceText("spotify:album:testAlbum"),
-                closeSoftKeyboard(),
-            )
-            onView(withId(R.id.addButton)).perform(click())
+        launchMainActivity()
 
-            waitUntil {
-                onView(withText("Test Album")).check(matches(isDisplayed()))
-            }
-        } finally {
-            scenario.close()
+        onView(withId(R.id.itemUriInput)).perform(
+            replaceText("spotify:album:testAlbum"),
+            closeSoftKeyboard(),
+        )
+        onView(withId(R.id.addButton)).perform(click())
+
+        waitUntil {
+            onView(withText("Test Album")).check(matches(isDisplayed()))
         }
     }
 
@@ -70,33 +67,30 @@ class AddPlusStartUiTest : AbstractUiTestCase() {
             },
         )
 
-        val scenario = launchMainActivity()
-        try {
-            onView(withId(R.id.startButton)).perform(scrollTo(), click())
+        launchMainActivity()
 
-            waitUntil {
-                onView(withId(R.id.playbackStatus)).check(
-                    matches(withText(startsWith("Now playing album 1 of 3: "))),
-                )
-            }
+        onView(withId(R.id.startButton)).perform(scrollTo(), click())
 
-            waitUntil {
-                check(harness.spotifyAppRemoteService.commands.size == 3)
-                check(
-                    harness.spotifyAppRemoteService.commands[0] ==
-                        TestSpotifyAppRemoteService.PlayerCommand.SetShuffle(enabled = false),
-                )
-                check(
-                    harness.spotifyAppRemoteService.commands[1] ==
-                        TestSpotifyAppRemoteService.PlayerCommand.SetRepeat(mode = Repeat.OFF),
-                )
-                check(
-                    harness.spotifyAppRemoteService.commands[2] is
-                        TestSpotifyAppRemoteService.PlayerCommand.Play,
-                )
-            }
-        } finally {
-            scenario.close()
+        waitUntil {
+            onView(withId(R.id.playbackStatus)).check(
+                matches(withText(startsWith("Now playing album 1 of 3: "))),
+            )
+        }
+
+        waitUntil {
+            check(harness.spotifyAppRemoteService.commands.size == 3)
+            check(
+                harness.spotifyAppRemoteService.commands[0] ==
+                    TestSpotifyAppRemoteService.PlayerCommand.SetShuffle(enabled = false),
+            )
+            check(
+                harness.spotifyAppRemoteService.commands[1] ==
+                    TestSpotifyAppRemoteService.PlayerCommand.SetRepeat(mode = Repeat.OFF),
+            )
+            check(
+                harness.spotifyAppRemoteService.commands[2] is
+                    TestSpotifyAppRemoteService.PlayerCommand.Play,
+            )
         }
     }
 }

@@ -22,6 +22,7 @@ import org.junit.Before
 
 abstract class AbstractUiTestCase {
     protected lateinit var harness: UiTestHarness
+    private var scenario: ActivityScenario<MainActivity>? = null
 
     @Before
     fun setUpUiTestHarness() {
@@ -31,11 +32,15 @@ abstract class AbstractUiTestCase {
 
     @After
     fun tearDownUiTestHarness() {
+        scenario?.close()
+        scenario = null
         harness.close()
     }
 
     protected fun launchMainActivity(): ActivityScenario<MainActivity> {
-        return ActivityScenario.launch(MainActivity::class.java)
+        return ActivityScenario.launch(MainActivity::class.java).also { launchedScenario ->
+            scenario = launchedScenario
+        }
     }
 
     protected fun waitUntil(
