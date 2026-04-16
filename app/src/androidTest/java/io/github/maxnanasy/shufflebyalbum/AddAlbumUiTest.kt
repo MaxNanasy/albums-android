@@ -61,6 +61,14 @@ class AddAlbumUiTest : SpotifyUiTestCase() {
                 ShuffleItem(type = "album", uri = "spotify:album:albumThree", title = "Album Three"),
             ),
         )
+        harness.setDispatcher(
+            jsonDispatcher { request ->
+                when (request.path) {
+                    "/v1/me/player" -> MockResponse().setResponseCode(204)
+                    else -> MockResponse().setResponseCode(404)
+                }
+            },
+        )
 
         val scenario = launchMainActivity()
         try {

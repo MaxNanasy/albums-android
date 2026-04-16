@@ -8,6 +8,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.spotify.android.appremote.api.AppRemote
 import com.spotify.android.appremote.api.PlayerApi
 import com.spotify.protocol.client.CallResult
+import com.spotify.protocol.client.PendingResult
 import com.spotify.protocol.types.Types
 import java.io.IOException
 import java.lang.reflect.Proxy
@@ -245,13 +246,24 @@ class TestSpotifyAppRemoteService : SpotifyAppRemoteService {
         } as AppRemote
 
     private fun completedCallResult(error: Throwable?): CallResult<Any?> {
-        val result = CallResult<Any?>(Types.RequestId.NONE)
+        return ImmediateCallResult(error = error)
+    }
+}
+
+private class ImmediateCallResult<T>(
+    private val value: T? = null,
+    private val error: Throwable? = null,
+) : CallResult<T>(Types.RequestId.NONE) {
+    override fun setResultCallback(callback: CallResult.ResultCallback<T>): CallResult<T> {
         if (error == null) {
-            result.deliverResult(null)
-        } else {
-            result.deliverError(error)
+            callback.onResult(value)
         }
-        return result
+        return this
+    }
+
+    override fun setErrorCallback(errorCallback: PendingResult.ErrorCallback): PendingResult<T> {
+        error?.let(errorCallback::onError)
+        return this
     }
 }
 
