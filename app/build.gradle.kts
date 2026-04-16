@@ -37,6 +37,10 @@ android {
             signingConfig = signingConfigs.getByName("env")
             applicationIdSuffix = ".debug"
         }
+        create("uiTest") {
+            initWith(getByName("debug"))
+            signingConfig = signingConfigs.getByName("debug")
+        }
         release {
             signingConfig = signingConfigs.getByName("env")
             isMinifyEnabled = false
@@ -46,6 +50,8 @@ android {
             )
         }
     }
+
+    testBuildType = "uiTest"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
