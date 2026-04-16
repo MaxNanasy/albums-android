@@ -15,6 +15,8 @@ import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import okhttp3.mockwebserver.RecordedRequest
+import org.json.JSONArray
+import org.json.JSONObject
 import org.junit.After
 import org.junit.Before
 
@@ -100,6 +102,19 @@ class SpotifyUiTestHarness : AutoCloseable {
             .commit()
     }
 
+    fun seedSavedItems(items: List<ShuffleItem>) {
+        val array = JSONArray()
+        items.forEach { item ->
+            array.put(
+                JSONObject()
+                    .put("type", item.type)
+                    .put("uri", item.uri)
+                    .put("title", item.title),
+            )
+        }
+        prefs.edit().putString(KEY_ITEMS, array.toString()).commit()
+    }
+
     fun clearAppState() {
         prefs.edit().clear().commit()
         spotifyAppRemoteService.reset()
@@ -126,6 +141,7 @@ class SpotifyUiTestHarness : AutoCloseable {
         private const val KEY_REFRESH_TOKEN = "shuffle-by-album.refreshToken"
         private const val KEY_TOKEN_EXPIRY = "shuffle-by-album.tokenExpiry"
         private const val KEY_TOKEN_SCOPE = "shuffle-by-album.tokenScope"
+        private const val KEY_ITEMS = "shuffle-by-album.items"
         private const val DEFAULT_TOKEN_SCOPES =
             "user-modify-playback-state user-read-playback-state playlist-read-private playlist-read-collaborative app-remote-control"
         private const val DEFAULT_SPOTIFY_ACCOUNTS_BASE_URL = "https://accounts.spotify.com"
