@@ -73,7 +73,7 @@ class MainActivity : AppCompatActivity() {
     private var nextPendingRemovalId: Long = 0
 
     private var session = SessionState()
-    private var spotifyAppRemote: SpotifyAppRemote? = null
+    private var spotifyAppRemote: SpotifyAppRemoteClient? = null
     private var connectingAppRemote = false
 
     private val monitorHandler = Handler(Looper.getMainLooper())
@@ -248,12 +248,12 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private suspend fun connectAppRemote(): SpotifyAppRemote {
+    private suspend fun connectAppRemote(): SpotifyAppRemoteClient {
         spotifyAppRemote?.let { return it }
         if (connectingAppRemote) {
             throw IllegalStateException("Spotify app connection is already in progress")
         }
-        if (!SpotifyAppRemote.isSpotifyInstalled(this)) {
+        if (!spotifyAppRemoteService.isSpotifyInstalled(this)) {
             throw IllegalStateException("Spotify app is not installed on this device")
         }
 
@@ -266,24 +266,21 @@ class MainActivity : AppCompatActivity() {
 
         return suspendCancellableCoroutine { continuation ->
             try {
-                SpotifyAppRemote.connect(
-                    this,
-                    params,
-                    object : Connector.ConnectionListener {
-                        override fun onConnected(remote: SpotifyAppRemote) {
-                            connectingAppRemote = false
-                            spotifyAppRemote = remote
-                            if (continuation.isActive) {
-                                continuation.resume(remote)
-                            }
+                spotifyAppRemoteService.connect(
+                    context = this,
+                    params = params,
+                    onConnected = { remote ->
+                        connectingAppRemote = false
+                        spotifyAppRemote = remote
+                        if (continuation.isActive) {
+                            continuation.resume(remote)
                         }
-
-                        override fun onFailure(error: Throwable) {
-                            connectingAppRemote = false
-                            spotifyAppRemote = null
-                            if (continuation.isActive) {
-                                continuation.resumeWithException(error)
-                            }
+                    },
+                    onFailure = { error ->
+                        connectingAppRemote = false
+                        spotifyAppRemote = null
+                        if (continuation.isActive) {
+                            continuation.resumeWithException(error)
                         }
                     },
                 )
@@ -298,7 +295,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private suspend fun awaitAppRemoteCall(
-        action: (SpotifyAppRemote) -> com.spotify.protocol.client.CallResult<*>,
+        action: (SpotifyAppRemoteClient) -> com.spotify.protocol.client.CallResult<*>,
     ) {
         val remote = connectAppRemote()
 
@@ -324,11 +321,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     private suspend fun playUriWithAppRemote(uri: String) {
-        awaitAppRemoteCall { remote -> remote.playerApi.play(uri) }
+        awaitAppRemoteCall { remote -> remote.play(uri) }
     }
 
     private fun disconnectAppRemote() {
-        spotifyAppRemote?.also { SpotifyAppRemote.disconnect(it) }
+        spotifyAppRemote?.also { spotifyAppRemoteService.disconnect(it) }
         spotifyAppRemote = null
         connectingAppRemote = false
     }
@@ -566,7 +563,7 @@ class MainActivity : AppCompatActivity() {
 
     private suspend fun runPlaybackPreflight(): PlaybackPreflightResult {
         try {
-            awaitAppRemoteCall { remote -> remote.playerApi.setShuffle(false) }
+            awaitAppRemoteCall { remote -> remote.setShuffle(false) }
         } catch (error: Throwable) {
             val failure = describeAppRemoteError(error)
             return PlaybackPreflightResult(
@@ -578,7 +575,7 @@ class MainActivity : AppCompatActivity() {
 
         try {
             awaitAppRemoteCall { remote ->
-                remote.playerApi.setRepeat(com.spotify.protocol.types.Repeat.OFF)
+                remote.setRepeat(com.spotify.protocol.types.Repeat.OFF)
             }
         } catch (error: Throwable) {
             val failure = describeAppRemoteError(error)
@@ -1358,6 +1355,7 @@ class MainActivity : AppCompatActivity() {
         private const val PREFS_NAME = "shuffle-by-album"
         internal var spotifyAccountsBaseUrl = "https://accounts.spotify.com"
         internal var spotifyApiBaseUrl = "https://api.spotify.com/v1"
+        internal var spotifyAppRemoteService: SpotifyAppRemoteService = RealSpotifyAppRemoteService
 
         private val SCOPES = listOf(
             "user-modify-playback-state",
@@ -1376,6 +1374,79 @@ class MainActivity : AppCompatActivity() {
         private const val KEY_RUNTIME = "shuffle-by-album.runtime"
         private const val UNDO_BANNER_DURATION_MS = 5_000L
         private const val ERROR_TOAST_COOLDOWN_MS = 45_000L
+    }
+}
+
+internal interface SpotifyAppRemoteClient {
+    fun play(uri: String): com.spotify.protocol.client.CallResult<*>
+
+    fun setShuffle(enabled: Boolean): com.spotify.protocol.client.CallResult<*>
+
+    fun setRepeat(repeat: Int): com.spotify.protocol.client.CallResult<*>
+}
+
+internal interface SpotifyAppRemoteService {
+    fun isSpotifyInstalled(context: Context): Boolean
+
+    fun connect(
+        context: Context,
+        params: ConnectionParams,
+        onConnected: (SpotifyAppRemoteClient) -> Unit,
+        onFailure: (Throwable) -> Unit,
+    )
+
+    fun disconnect(client: SpotifyAppRemoteClient)
+}
+
+private class RealSpotifyAppRemoteClient(
+    private val remote: SpotifyAppRemote,
+) : SpotifyAppRemoteClient {
+    override fun play(uri: String): com.spotify.protocol.client.CallResult<*> {
+        return remote.playerApi.play(uri)
+    }
+
+    override fun setShuffle(enabled: Boolean): com.spotify.protocol.client.CallResult<*> {
+        return remote.playerApi.setShuffle(enabled)
+    }
+
+    override fun setRepeat(repeat: Int): com.spotify.protocol.client.CallResult<*> {
+        return remote.playerApi.setRepeat(repeat)
+    }
+
+    fun disconnect() {
+        SpotifyAppRemote.disconnect(remote)
+    }
+}
+
+private object RealSpotifyAppRemoteService : SpotifyAppRemoteService {
+    override fun isSpotifyInstalled(context: Context): Boolean {
+        return SpotifyAppRemote.isSpotifyInstalled(context)
+    }
+
+    override fun connect(
+        context: Context,
+        params: ConnectionParams,
+        onConnected: (SpotifyAppRemoteClient) -> Unit,
+        onFailure: (Throwable) -> Unit,
+    ) {
+        SpotifyAppRemote.connect(
+            context,
+            params,
+            object : Connector.ConnectionListener {
+                override fun onConnected(remote: SpotifyAppRemote) {
+                    onConnected(RealSpotifyAppRemoteClient(remote))
+                }
+
+                override fun onFailure(error: Throwable) {
+                    onFailure(error)
+                }
+            },
+        )
+    }
+
+    override fun disconnect(client: SpotifyAppRemoteClient) {
+        val realClient = client as? RealSpotifyAppRemoteClient ?: return
+        realClient.disconnect()
     }
 }
 
