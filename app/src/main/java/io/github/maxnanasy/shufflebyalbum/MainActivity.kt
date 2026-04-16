@@ -231,7 +231,7 @@ class MainActivity : AppCompatActivity() {
         prefs.edit().putString(KEY_VERIFIER, verifier).apply()
         val challenge = codeChallengeFromVerifier(verifier)
 
-        val authUri = Uri.parse("https://accounts.spotify.com/authorize").buildUpon()
+        val authUri = spotifyAccountsUri("/authorize").buildUpon()
             .appendQueryParameter("response_type", "code")
             .appendQueryParameter("client_id", SPOTIFY_APP_ID)
             .appendQueryParameter("scope", SCOPES.joinToString(" "))
@@ -938,7 +938,7 @@ class MainActivity : AppCompatActivity() {
             "client_id" to SPOTIFY_APP_ID,
             "code_verifier" to verifier,
         )
-        val response = formPost("https://accounts.spotify.com/api/token", params)
+        val response = formPost(spotifyAccountsUrl("/api/token"), params)
         if (!response.ok || response.body == null) {
             reportError(
                 statusView = authStatus,
@@ -962,7 +962,7 @@ class MainActivity : AppCompatActivity() {
             "refresh_token" to refreshToken,
             "client_id" to SPOTIFY_APP_ID,
         )
-        val response = formPost("https://accounts.spotify.com/api/token", params)
+        val response = formPost(spotifyAccountsUrl("/api/token"), params)
         if (!response.ok || response.body == null) {
             val refreshStatusMessage = if (response.failureReason != null) {
                 "Network issue refreshing Spotify session. Please reconnect if this continues."
@@ -1058,7 +1058,7 @@ class MainActivity : AppCompatActivity() {
     private suspend fun runSpotifyApiRequest(path: String, method: String, token: String, body: String?): HttpResult {
         return withContext(Dispatchers.IO) {
             try {
-                val url = URL("https://api.spotify.com/v1$path")
+                val url = URL(spotifyApiUrl(path))
                 val conn = (url.openConnection() as HttpURLConnection).apply {
                     requestMethod = method
                     setRequestProperty("Authorization", "Bearer $token")
@@ -1232,6 +1232,22 @@ class MainActivity : AppCompatActivity() {
         return Regex("^spotify:(album|playlist):([a-zA-Z0-9]+)$").matchEntire(uri)?.groupValues?.get(2)
     }
 
+    private fun spotifyAccountsUri(path: String): Uri {
+        return Uri.parse(spotifyAccountsUrl(path))
+    }
+
+    private fun spotifyAccountsUrl(path: String): String {
+        return buildSpotifyUrl(spotifyAccountsBaseUrl, path)
+    }
+
+    private fun spotifyApiUrl(path: String): String {
+        return buildSpotifyUrl(spotifyApiBaseUrl, path)
+    }
+
+    private fun buildSpotifyUrl(baseUrl: String, path: String): String {
+        return "${baseUrl.trimEnd('/')}/${path.trimStart('/')}"
+    }
+
     private fun codeChallengeFromVerifier(verifier: String): String {
         val digest = MessageDigest.getInstance("SHA-256").digest(verifier.toByteArray())
         return Base64.encodeToString(digest, Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
@@ -1340,6 +1356,8 @@ class MainActivity : AppCompatActivity() {
         private const val SPOTIFY_APP_ID = "5082b1452bc24cc3a0955f2d1c4e5560"
         private const val REDIRECT_URI = "shufflebyalbum://callback"
         private const val PREFS_NAME = "shuffle-by-album"
+        internal var spotifyAccountsBaseUrl = "https://accounts.spotify.com"
+        internal var spotifyApiBaseUrl = "https://api.spotify.com/v1"
 
         private val SCOPES = listOf(
             "user-modify-playback-state",
