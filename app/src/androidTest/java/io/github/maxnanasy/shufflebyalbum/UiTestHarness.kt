@@ -20,17 +20,17 @@ import org.json.JSONObject
 import org.junit.After
 import org.junit.Before
 
-abstract class SpotifyUiTestCase {
-    protected lateinit var harness: SpotifyUiTestHarness
+abstract class AbstractUiTestCase {
+    protected lateinit var harness: UiTestHarness
 
     @Before
-    fun setUpSpotifyUiTestHarness() {
-        harness = SpotifyUiTestHarness()
+    fun setUpUiTestHarness() {
+        harness = UiTestHarness()
         harness.start()
     }
 
     @After
-    fun tearDownSpotifyUiTestHarness() {
+    fun tearDownUiTestHarness() {
         harness.close()
     }
 
@@ -59,7 +59,7 @@ abstract class SpotifyUiTestCase {
     }
 }
 
-class SpotifyUiTestHarness : AutoCloseable {
+class UiTestHarness : AutoCloseable {
     private val context = ApplicationProvider.getApplicationContext<Context>()
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     val server = MockWebServer()

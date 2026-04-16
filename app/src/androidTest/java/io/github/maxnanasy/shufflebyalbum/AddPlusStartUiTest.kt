@@ -17,9 +17,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
-class AddAlbumUiTest : SpotifyUiTestCase() {
+class AddPlusStartUiTest : AbstractUiTestCase() {
     @Test
-    fun addsAlbumUsingMockedSpotifyResponse() {
+    fun addsAlbum() {
         harness.seedConnectedSession()
         harness.setDispatcher(
             jsonDispatcher { request ->
@@ -52,7 +52,7 @@ class AddAlbumUiTest : SpotifyUiTestCase() {
     }
 
     @Test
-    fun startsPlaybackWithThreeSavedItems() {
+    fun startsPlayback() {
         harness.seedConnectedSession()
         harness.seedSavedItems(
             listOf(
