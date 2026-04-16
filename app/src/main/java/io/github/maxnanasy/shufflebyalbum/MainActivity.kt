@@ -19,6 +19,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.spotify.android.appremote.api.AppRemote
 import com.spotify.android.appremote.api.ConnectionParams
 import com.spotify.android.appremote.api.Connector
 import com.spotify.android.appremote.api.SpotifyAppRemote
@@ -73,7 +74,7 @@ class MainActivity : AppCompatActivity() {
     private var nextPendingRemovalId: Long = 0
 
     private var session = SessionState()
-    private var spotifyAppRemote: SpotifyAppRemote? = null
+    private var spotifyAppRemote: AppRemote? = null
     private var connectingAppRemote = false
 
     private val monitorHandler = Handler(Looper.getMainLooper())
@@ -231,7 +232,7 @@ class MainActivity : AppCompatActivity() {
         prefs.edit().putString(KEY_VERIFIER, verifier).apply()
         val challenge = codeChallengeFromVerifier(verifier)
 
-        val authUri = Uri.parse("https://accounts.spotify.com/authorize").buildUpon()
+        val authUri = spotifyAccountsUri("/authorize").buildUpon()
             .appendQueryParameter("response_type", "code")
             .appendQueryParameter("client_id", SPOTIFY_APP_ID)
             .appendQueryParameter("scope", SCOPES.joinToString(" "))
@@ -248,12 +249,12 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private suspend fun connectAppRemote(): SpotifyAppRemote {
+    private suspend fun connectAppRemote(): AppRemote {
         spotifyAppRemote?.let { return it }
         if (connectingAppRemote) {
             throw IllegalStateException("Spotify app connection is already in progress")
         }
-        if (!SpotifyAppRemote.isSpotifyInstalled(this)) {
+        if (!spotifyAppRemoteService.isSpotifyInstalled(this)) {
             throw IllegalStateException("Spotify app is not installed on this device")
         }
 
@@ -266,24 +267,21 @@ class MainActivity : AppCompatActivity() {
 
         return suspendCancellableCoroutine { continuation ->
             try {
-                SpotifyAppRemote.connect(
-                    this,
-                    params,
-                    object : Connector.ConnectionListener {
-                        override fun onConnected(remote: SpotifyAppRemote) {
-                            connectingAppRemote = false
-                            spotifyAppRemote = remote
-                            if (continuation.isActive) {
-                                continuation.resume(remote)
-                            }
+                spotifyAppRemoteService.connect(
+                    context = this,
+                    params = params,
+                    onConnected = { remote ->
+                        connectingAppRemote = false
+                        spotifyAppRemote = remote
+                        if (continuation.isActive) {
+                            continuation.resume(remote)
                         }
-
-                        override fun onFailure(error: Throwable) {
-                            connectingAppRemote = false
-                            spotifyAppRemote = null
-                            if (continuation.isActive) {
-                                continuation.resumeWithException(error)
-                            }
+                    },
+                    onFailure = { error ->
+                        connectingAppRemote = false
+                        spotifyAppRemote = null
+                        if (continuation.isActive) {
+                            continuation.resumeWithException(error)
                         }
                     },
                 )
@@ -298,7 +296,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private suspend fun awaitAppRemoteCall(
-        action: (SpotifyAppRemote) -> com.spotify.protocol.client.CallResult<*>,
+        action: (AppRemote) -> com.spotify.protocol.client.CallResult<*>,
     ) {
         val remote = connectAppRemote()
 
@@ -328,7 +326,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun disconnectAppRemote() {
-        spotifyAppRemote?.also { SpotifyAppRemote.disconnect(it) }
+        spotifyAppRemote?.also { spotifyAppRemoteService.disconnect(it) }
         spotifyAppRemote = null
         connectingAppRemote = false
     }
@@ -938,7 +936,7 @@ class MainActivity : AppCompatActivity() {
             "client_id" to SPOTIFY_APP_ID,
             "code_verifier" to verifier,
         )
-        val response = formPost("https://accounts.spotify.com/api/token", params)
+        val response = formPost(spotifyAccountsUrl("/api/token"), params)
         if (!response.ok || response.body == null) {
             reportError(
                 statusView = authStatus,
@@ -962,7 +960,7 @@ class MainActivity : AppCompatActivity() {
             "refresh_token" to refreshToken,
             "client_id" to SPOTIFY_APP_ID,
         )
-        val response = formPost("https://accounts.spotify.com/api/token", params)
+        val response = formPost(spotifyAccountsUrl("/api/token"), params)
         if (!response.ok || response.body == null) {
             val refreshStatusMessage = if (response.failureReason != null) {
                 "Network issue refreshing Spotify session. Please reconnect if this continues."
@@ -1058,7 +1056,7 @@ class MainActivity : AppCompatActivity() {
     private suspend fun runSpotifyApiRequest(path: String, method: String, token: String, body: String?): HttpResult {
         return withContext(Dispatchers.IO) {
             try {
-                val url = URL("https://api.spotify.com/v1$path")
+                val url = URL(spotifyApiUrl(path))
                 val conn = (url.openConnection() as HttpURLConnection).apply {
                     requestMethod = method
                     setRequestProperty("Authorization", "Bearer $token")
@@ -1232,6 +1230,22 @@ class MainActivity : AppCompatActivity() {
         return Regex("^spotify:(album|playlist):([a-zA-Z0-9]+)$").matchEntire(uri)?.groupValues?.get(2)
     }
 
+    private fun spotifyAccountsUri(path: String): Uri {
+        return Uri.parse(spotifyAccountsUrl(path))
+    }
+
+    private fun spotifyAccountsUrl(path: String): String {
+        return buildSpotifyUrl(spotifyAccountsBaseUrl, path)
+    }
+
+    private fun spotifyApiUrl(path: String): String {
+        return buildSpotifyUrl(spotifyApiBaseUrl, path)
+    }
+
+    private fun buildSpotifyUrl(baseUrl: String, path: String): String {
+        return "${baseUrl.trimEnd('/')}/${path.trimStart('/')}"
+    }
+
     private fun codeChallengeFromVerifier(verifier: String): String {
         val digest = MessageDigest.getInstance("SHA-256").digest(verifier.toByteArray())
         return Base64.encodeToString(digest, Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
@@ -1340,6 +1354,9 @@ class MainActivity : AppCompatActivity() {
         private const val SPOTIFY_APP_ID = "5082b1452bc24cc3a0955f2d1c4e5560"
         private const val REDIRECT_URI = "shufflebyalbum://callback"
         private const val PREFS_NAME = "shuffle-by-album"
+        internal var spotifyAccountsBaseUrl = "https://accounts.spotify.com"
+        internal var spotifyApiBaseUrl = "https://api.spotify.com/v1"
+        internal var spotifyAppRemoteService: SpotifyAppRemoteService = RealSpotifyAppRemoteService
 
         private val SCOPES = listOf(
             "user-modify-playback-state",
@@ -1358,6 +1375,51 @@ class MainActivity : AppCompatActivity() {
         private const val KEY_RUNTIME = "shuffle-by-album.runtime"
         private const val UNDO_BANNER_DURATION_MS = 5_000L
         private const val ERROR_TOAST_COOLDOWN_MS = 45_000L
+    }
+}
+
+internal interface SpotifyAppRemoteService {
+    fun isSpotifyInstalled(context: Context): Boolean
+
+    fun connect(
+        context: Context,
+        params: ConnectionParams,
+        onConnected: (AppRemote) -> Unit,
+        onFailure: (Throwable) -> Unit,
+    )
+
+    fun disconnect(appRemote: AppRemote)
+}
+
+private object RealSpotifyAppRemoteService : SpotifyAppRemoteService {
+    override fun isSpotifyInstalled(context: Context): Boolean {
+        return SpotifyAppRemote.isSpotifyInstalled(context)
+    }
+
+    override fun connect(
+        context: Context,
+        params: ConnectionParams,
+        onConnected: (AppRemote) -> Unit,
+        onFailure: (Throwable) -> Unit,
+    ) {
+        SpotifyAppRemote.connect(
+            context,
+            params,
+            object : Connector.ConnectionListener {
+                override fun onConnected(remote: SpotifyAppRemote) {
+                    onConnected(remote)
+                }
+
+                override fun onFailure(error: Throwable) {
+                    onFailure(error)
+                }
+            },
+        )
+    }
+
+    override fun disconnect(appRemote: AppRemote) {
+        val spotifyAppRemote = appRemote as? SpotifyAppRemote ?: return
+        SpotifyAppRemote.disconnect(spotifyAppRemote)
     }
 }
 

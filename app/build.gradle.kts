@@ -37,6 +37,10 @@ android {
             signingConfig = signingConfigs.getByName("env")
             applicationIdSuffix = ".debug"
         }
+        create("uiTest") {
+            initWith(getByName("debug"))
+            signingConfig = signingConfigs.getByName("debug")
+        }
         release {
             signingConfig = signingConfigs.getByName("env")
             isMinifyEnabled = false
@@ -46,6 +50,8 @@ android {
             )
         }
     }
+
+    testBuildType = "uiTest"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -91,6 +97,10 @@ dependencies {
     implementation("com.google.code.gson:gson:2.13.2")
 
     testImplementation("junit:junit:4.13.2")
+    androidTestImplementation("androidx.test:core-ktx:1.6.1")
+    androidTestImplementation("androidx.test:runner:1.6.1")
+    androidTestImplementation("androidx.test:rules:1.6.1")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
+    androidTestImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
 }
