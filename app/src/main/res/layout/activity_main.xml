@@ -249,7 +249,7 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="Export Data JSON" />
+                        android:text="Export Data" />
 
                     <com.google.android.material.button.MaterialButton
                         style="@style/Widget.MaterialComponents.Button.OutlinedButton"
@@ -258,15 +258,15 @@
                         android:layout_height="wrap_content"
                         android:layout_marginStart="@dimen/button_group_horizontal_spacing"
                         android:layout_weight="1"
-                        android:text="Import Data JSON" />
+                        android:text="Import Data" />
                 </LinearLayout>
 
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="@dimen/control_vertical_spacing"
-                    android:text="Data JSON"
-                    android:textStyle="bold" />
+                    android:text="@string/storage_data_helper_text"
+                    android:textSize="@dimen/helper_text_size" />
 
                 <EditText
                     android:id="@+id/storageJsonInput"
@@ -279,12 +279,6 @@
                     android:scrollbars="vertical"
                     android:importantForAutofill="no" />
 
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/control_vertical_spacing"
-                    android:text="Export copies your saved items into the text box. Import replaces saved items with the data in the text box."
-                    android:textSize="@dimen/helper_text_size" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
     </LinearLayout>
