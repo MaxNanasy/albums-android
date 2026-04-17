@@ -43,10 +43,10 @@ abstract class AbstractUiTestCase {
         }
     }
 
-    protected fun waitUntil(
+    protected inline fun waitUntil(
         timeoutMs: Long = 5_000L,
         intervalMs: Long = 50L,
-        assertion: () -> Unit,
+        crossinline assertion: () -> Unit,
     ) {
         val deadline = SystemClock.elapsedRealtime() + timeoutMs
         var lastError: Throwable? = null
