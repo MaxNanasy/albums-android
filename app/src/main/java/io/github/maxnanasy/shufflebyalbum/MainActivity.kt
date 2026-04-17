@@ -570,7 +570,7 @@ class MainActivity : AppCompatActivity() {
             return PlaybackPreflightResult(
                 ok = false,
                 detach = true,
-                message = "Playback detached: Playback preflight failed: could not disable shuffle ($failure).",
+                message = "Playback detached due to a Spotify error: Playback preflight failed: could not disable shuffle ($failure).",
             )
         }
 
@@ -583,7 +583,7 @@ class MainActivity : AppCompatActivity() {
             return PlaybackPreflightResult(
                 ok = false,
                 detach = true,
-                message = "Playback detached: Playback preflight failed: could not disable repeat ($failure).",
+                message = "Playback detached due to a Spotify error: Playback preflight failed: could not disable repeat ($failure).",
             )
         }
 
