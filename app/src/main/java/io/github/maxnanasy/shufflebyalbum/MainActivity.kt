@@ -18,6 +18,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.text.HtmlCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.spotify.android.appremote.api.AppRemote
 import com.spotify.android.appremote.api.ConnectionParams
@@ -53,6 +54,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var authStatus: TextView
     private lateinit var playbackStatus: TextView
     private lateinit var itemUriInput: EditText
+    private lateinit var itemInputHelperText: TextView
     private lateinit var storageJsonInput: EditText
     private lateinit var undoBannerContainer: LinearLayout
 
@@ -128,8 +130,13 @@ class MainActivity : AppCompatActivity() {
         authStatus = findViewById(R.id.authStatus)
         playbackStatus = findViewById(R.id.playbackStatus)
         itemUriInput = findViewById(R.id.itemUriInput)
+        itemInputHelperText = findViewById(R.id.itemInputHelperText)
         storageJsonInput = findViewById(R.id.storageJsonInput)
         undoBannerContainer = findViewById(R.id.undoBannerContainer)
+        itemInputHelperText.text = HtmlCompat.fromHtml(
+            "<b>Add</b> adds one item to the list<br><b>Import Albums</b> processes a playlist and adds each song's album to the list",
+            HtmlCompat.FROM_HTML_MODE_LEGACY,
+        )
 
         connectButton = findViewById(R.id.connectButton)
         disconnectButton = findViewById(R.id.disconnectButton)
@@ -175,7 +182,7 @@ class MainActivity : AppCompatActivity() {
         }
         startButton.setOnClickListener { launchUiAction("Start playback") { startShuffleSession() } }
         reattachButton.setOnClickListener { launchUiAction("Reattach session") { reattachSession() } }
-        skipButton.setOnClickListener { launchUiAction("Skip item") { goToNextItem() } }
+        skipButton.setOnClickListener { launchUiAction("Next item") { goToNextItem() } }
         stopButton.setOnClickListener { stopSession("Session stopped.") }
         exportStorageButton.setOnClickListener { exportStorageJson() }
         importStorageButton.setOnClickListener { importStorageJson() }
@@ -469,8 +476,8 @@ class MainActivity : AppCompatActivity() {
         val snapshotResult = fetchCurrentPlaybackSnapshot(token)
         if (!snapshotResult.ok) {
             val failure = spotifyFailureMessage(snapshotResult.status, snapshotResult.failureReason)
-            transitionDetached("Cannot reattach: $failure.")
-            reportError(toastMessage = "Reattach failed: $failure.")
+            transitionDetached("Failed to reattach: $failure.")
+            reportError(toastMessage = "Failed to reattach.")
             return
         }
 
@@ -553,8 +560,8 @@ class MainActivity : AppCompatActivity() {
             playUriWithAppRemote(current.uri)
         } catch (error: Throwable) {
             val failure = describeAppRemoteError(error)
-            transitionDetached("Playback detached: $failure.")
-            reportError(toastMessage = "Playback detached: $failure.")
+            transitionDetached("Playback detached due to a Spotify error: $failure.")
+            reportError(toastMessage = "Playback detached due to a Spotify error: $failure.")
             return PlaybackStartResult.DETACHED
         }
 
@@ -1496,11 +1503,8 @@ private fun HttpResult.describePlaylistImportFailure(): String {
         return normalizeSpotifyNetworkError(failureReason ?: "network error")
     }
     val details = extractErrorDetail(body)
-    return if (details.isNullOrBlank()) {
-        "Unable to import albums from that playlist (status $status). Please try again."
-    } else {
-        "Unable to import albums from that playlist (status $status). $details"
-    }
+    val error = if (details.isNullOrBlank()) "status $status" else details
+    return "Error importing albums: $error."
 }
 
 private fun PlaybackSnapshotResult.describeFailure(): String {

@@ -8,6 +8,7 @@ import androidx.test.espresso.action.ViewActions.scrollTo
 import androidx.test.espresso.assertion.ViewAssertions.matches
 import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
 import androidx.test.espresso.matcher.ViewMatchers.withId
+import androidx.test.espresso.matcher.ViewMatchers.withHint
 import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.spotify.protocol.types.Repeat
@@ -18,6 +19,26 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class AddPlusStartUiTest : AbstractUiTestCase() {
+    @Test
+    fun showsUpdatedItemManagementCopy() {
+        harness.seedConnectedSession()
+
+        launchMainActivity()
+
+        onView(withId(R.id.itemUriInput)).check(
+            matches(withHint("https://open.spotify.com/(album|playlist)/...")),
+        )
+        onView(withId(R.id.itemInputHelperText)).check(
+            matches(
+                withText(
+                    "Add adds one item to the list\n" +
+                        "Import Albums processes a playlist and adds each song's album to the list",
+                ),
+            ),
+        )
+        onView(withId(R.id.skipButton)).check(matches(withText("Next")))
+    }
+
     @Test
     fun addsAlbum() {
         harness.seedConnectedSession()
