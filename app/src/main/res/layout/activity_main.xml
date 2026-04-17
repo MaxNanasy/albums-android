@@ -131,7 +131,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="@dimen/control_vertical_spacing"
-                    android:text="Add adds one item to the list&#10;Import Albums processes a playlist and adds each song's album to the list" />
+                    android:text="@string/item_input_helper_text" />
 
                 <androidx.recyclerview.widget.RecyclerView
                     android:id="@+id/itemRecycler"

@@ -18,7 +18,6 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.text.HtmlCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.spotify.android.appremote.api.AppRemote
 import com.spotify.android.appremote.api.ConnectionParams
@@ -54,7 +53,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var authStatus: TextView
     private lateinit var playbackStatus: TextView
     private lateinit var itemUriInput: EditText
-    private lateinit var itemInputHelperText: TextView
     private lateinit var storageJsonInput: EditText
     private lateinit var undoBannerContainer: LinearLayout
 
@@ -130,13 +128,8 @@ class MainActivity : AppCompatActivity() {
         authStatus = findViewById(R.id.authStatus)
         playbackStatus = findViewById(R.id.playbackStatus)
         itemUriInput = findViewById(R.id.itemUriInput)
-        itemInputHelperText = findViewById(R.id.itemInputHelperText)
         storageJsonInput = findViewById(R.id.storageJsonInput)
         undoBannerContainer = findViewById(R.id.undoBannerContainer)
-        itemInputHelperText.text = HtmlCompat.fromHtml(
-            "<b>Add</b> adds one item to the list<br><b>Import Albums</b> processes a playlist and adds each song's album to the list",
-            HtmlCompat.FROM_HTML_MODE_LEGACY,
-        )
 
         connectButton = findViewById(R.id.connectButton)
         disconnectButton = findViewById(R.id.disconnectButton)
