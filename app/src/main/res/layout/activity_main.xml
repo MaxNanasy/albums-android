@@ -97,7 +97,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="@dimen/control_vertical_spacing"
-                    android:hint="spotify:album:... or spotify:playlist:..."
+                    android:hint="https://open.spotify.com/(album|playlist)/..."
                     android:importantForAutofill="no"
                     android:imeOptions="actionDone"
                     android:inputType="textUri" />
@@ -127,10 +127,11 @@
                 </LinearLayout>
 
                 <TextView
+                    android:id="@+id/itemInputHelperText"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="@dimen/control_vertical_spacing"
-                    android:text="Tip: You can paste a normal Spotify URL and it will be converted. For playlist imports, you can also paste a playlist ID." />
+                    android:text="@string/item_input_helper_text" />
 
                 <androidx.recyclerview.widget.RecyclerView
                     android:id="@+id/itemRecycler"
@@ -193,7 +194,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginStart="@dimen/button_group_horizontal_spacing"
-                        android:text="Skip" />
+                        android:text="Next" />
 
                     <com.google.android.material.button.MaterialButton
                         style="@style/Widget.MaterialComponents.Button.OutlinedButton"
