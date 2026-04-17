@@ -13,7 +13,7 @@ Add the following text updates in production code and the affected UI tests.
 | Toast after a recoverable reattach failure | `Reattach failed: <error>.` | `Failed to reattach.` |
 | Next-item session control label | `Skip` | `Next` |
 | Playlist import failure toast after Spotify returns an error | `Unable to import albums from that playlist (status <status>). <details>` | `Error importing albums: <error>.` |
-| Add/import input placeholder in the item-management panel | `spotify:album:... or spotify:playlist:...` | `https://open.spotify.com/(album|playlist)/...` |
+| Add/import input placeholder in the item-management panel | `spotify:album:... or spotify:playlist:...` | `https://open.spotify.com/(album\|playlist)/...` |
 | Helper copy beneath the add/import controls | `Tip: You can paste a normal Spotify URL and it will be converted. For playlist imports, you can also paste a playlist ID.` | `<b>Add</b> adds one item to the list`<br>`<b>Import Albums</b> processes a playlist and adds each song's album to the list` |
 
 Implementation notes:
