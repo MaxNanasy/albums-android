@@ -1,6 +1,6 @@
 ## Issue
 
-The Android repo has several user-visible strings that should be aligned with the new cross-platform wording, including the add/import input placeholder and the helper copy beneath the add/import controls.
+The Android repo has several user-visible strings that should be aligned with the new cross-platform wording.
 
 ## Solution
 
