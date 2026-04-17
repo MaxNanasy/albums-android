@@ -17,5 +17,5 @@ Add the following text updates in production code and the affected UI tests.
 Implementation notes:
 
 - Update production strings in `app/src/main/java/io/github/maxnanasy/shufflebyalbum/MainActivity.kt` and `app/src/main/res/layout/activity_main.xml`.
-- Update the affected UI assertions in `app/src/androidTest/java/io/github/maxnanasy/shufflebyalbum/AddAlbumUiTest.kt` and any additional Android UI test files that cover reattach and playlist import flows.
+- Update the affected UI assertions in `app/src/androidTest/java/io/github/maxnanasy/shufflebyalbum/AddAlbumUiTest.kt`.
 - Keep the existing contextual error details, but format them so they fit the new `<error>` placeholders when those details remain user-visible.
