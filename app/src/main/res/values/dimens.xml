@@ -10,4 +10,5 @@
     <dimen name="item_row_padding">8dp</dimen>
     <dimen name="undo_banner_bottom_spacing">8dp</dimen>
     <dimen name="undo_banner_content_padding">12dp</dimen>
+    <dimen name="helper_text_size">12sp</dimen>
 </resources>

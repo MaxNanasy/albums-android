@@ -130,7 +130,8 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="@dimen/control_vertical_spacing"
-                    android:text="@string/item_input_helper_text" />
+                    android:text="@string/item_input_helper_text"
+                    android:textSize="@dimen/helper_text_size" />
 
                 <androidx.recyclerview.widget.RecyclerView
                     android:id="@+id/itemRecycler"
@@ -283,7 +284,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="@dimen/control_vertical_spacing"
                     android:text="Export copies your saved items into the text box. Import replaces saved items with the data in the text box."
-                    android:textSize="12sp" />
+                    android:textSize="@dimen/helper_text_size" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
     </LinearLayout>
