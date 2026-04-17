@@ -1,6 +1,6 @@
 ## Issue
 
-The Android repo has several user-visible strings that should be aligned with the new cross-platform wording for detached playback, reattach failures, the next-item control label, and playlist import failures.
+The Android repo has several user-visible strings that should be aligned with the new cross-platform wording.
 
 ## Solution
 
