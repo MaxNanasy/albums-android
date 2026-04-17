@@ -175,7 +175,7 @@ class MainActivity : AppCompatActivity() {
         }
         startButton.setOnClickListener { launchUiAction("Start playback") { startShuffleSession() } }
         reattachButton.setOnClickListener { launchUiAction("Reattach session") { reattachSession() } }
-        skipButton.setOnClickListener { launchUiAction("Skip item") { goToNextItem() } }
+        skipButton.setOnClickListener { launchUiAction("Next item") { goToNextItem() } }
         stopButton.setOnClickListener { stopSession("Session stopped.") }
         exportStorageButton.setOnClickListener { exportStorageJson() }
         importStorageButton.setOnClickListener { importStorageJson() }
@@ -469,8 +469,8 @@ class MainActivity : AppCompatActivity() {
         val snapshotResult = fetchCurrentPlaybackSnapshot(token)
         if (!snapshotResult.ok) {
             val failure = spotifyFailureMessage(snapshotResult.status, snapshotResult.failureReason)
-            transitionDetached("Cannot reattach: $failure.")
-            reportError(toastMessage = "Reattach failed: $failure.")
+            transitionDetached("Failed to reattach: $failure.")
+            reportError(toastMessage = "Failed to reattach.")
             return
         }
 
@@ -553,8 +553,8 @@ class MainActivity : AppCompatActivity() {
             playUriWithAppRemote(current.uri)
         } catch (error: Throwable) {
             val failure = describeAppRemoteError(error)
-            transitionDetached("Playback detached: $failure.")
-            reportError(toastMessage = "Playback detached: $failure.")
+            transitionDetached("Playback detached due to a Spotify error: $failure.")
+            reportError(toastMessage = "Playback detached due to a Spotify error: $failure.")
             return PlaybackStartResult.DETACHED
         }
 
@@ -570,7 +570,7 @@ class MainActivity : AppCompatActivity() {
             return PlaybackPreflightResult(
                 ok = false,
                 detach = true,
-                message = "Playback detached: Playback preflight failed: could not disable shuffle ($failure).",
+                message = "Playback detached due to a Spotify error: Playback preflight failed: could not disable shuffle ($failure).",
             )
         }
 
@@ -583,7 +583,7 @@ class MainActivity : AppCompatActivity() {
             return PlaybackPreflightResult(
                 ok = false,
                 detach = true,
-                message = "Playback detached: Playback preflight failed: could not disable repeat ($failure).",
+                message = "Playback detached due to a Spotify error: Playback preflight failed: could not disable repeat ($failure).",
             )
         }
 
@@ -1496,11 +1496,8 @@ private fun HttpResult.describePlaylistImportFailure(): String {
         return normalizeSpotifyNetworkError(failureReason ?: "network error")
     }
     val details = extractErrorDetail(body)
-    return if (details.isNullOrBlank()) {
-        "Unable to import albums from that playlist (status $status). Please try again."
-    } else {
-        "Unable to import albums from that playlist (status $status). $details"
-    }
+    val error = if (details.isNullOrBlank()) "status $status" else details
+    return "Error importing albums: $error."
 }
 
 private fun PlaybackSnapshotResult.describeFailure(): String {

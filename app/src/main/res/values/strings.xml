@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Shuffle By Album</string>
+    <string name="item_input_helper_text"><b>Add</b> adds one item to the list\n<b>Import Albums</b> processes a playlist and adds each song\'s album to the list</string>
+    <string name="storage_data_helper_text"><b>Export Data</b> copies your saved items into the text box\n<b>Import Data</b> replaces your saved items with the data in the text box</string>
 </resources>

@@ -19,7 +19,6 @@ Add the following text updates in production code and the affected UI tests.
 Implementation notes:
 
 - Update production strings in `app/src/main/java/io/github/maxnanasy/shufflebyalbum/MainActivity.kt` and `app/src/main/res/layout/activity_main.xml`.
-- Update the affected UI assertions in `app/src/androidTest/java/io/github/maxnanasy/shufflebyalbum/AddAlbumUiTest.kt`.
 - Update any helper-text assertions or snapshots that cover the input placeholder or the explanatory copy beneath the add/import controls.
 - Preserve the intended two-line presentation of the helper copy when implementing the new wording.
 - Keep the existing contextual error details, but format them so they fit the new `<error>` placeholders when those details remain user-visible.
