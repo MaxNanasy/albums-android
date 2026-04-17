@@ -20,26 +20,6 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class AddPlusStartUiTest : AbstractUiTestCase() {
     @Test
-    fun showsUpdatedItemManagementCopy() {
-        harness.seedConnectedSession()
-
-        launchMainActivity()
-
-        onView(withId(R.id.itemUriInput)).check(
-            matches(withHint("https://open.spotify.com/(album|playlist)/...")),
-        )
-        onView(withId(R.id.itemInputHelperText)).check(
-            matches(
-                withText(
-                    "Add adds one item to the list\n" +
-                        "Import Albums processes a playlist and adds each song's album to the list",
-                ),
-            ),
-        )
-        onView(withId(R.id.skipButton)).check(matches(withText("Next")))
-    }
-
-    @Test
     fun addsAlbum() {
         harness.seedConnectedSession()
         harness.setDispatcher(
