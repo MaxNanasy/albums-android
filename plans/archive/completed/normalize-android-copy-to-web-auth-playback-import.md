@@ -34,7 +34,7 @@ Implementation notes:
 
 Normalize Android startup auth text so it no longer exposes a dedicated restore lifecycle. Use these target strings instead:
 
-- Generic auth validation failure status: `Unable to validate Spotify session. Please reconnect.`
+- Generic auth validation failure status: `Unable to restore Spotify session. Please reconnect.`
 - Generic auth refresh network-failure status: `Network issue refreshing Spotify session. Please reconnect if this continues.`
 
 Implementation notes:
@@ -120,7 +120,7 @@ Apply the following auth/login-specific copy updates.
 
 Use:
 
-`Unable to validate Spotify session. Please reconnect.`
+`Unable to restore Spotify session. Please reconnect.`
 
 Use this as the generic auth-validation failure status instead of restore-specific failure wording.
 
