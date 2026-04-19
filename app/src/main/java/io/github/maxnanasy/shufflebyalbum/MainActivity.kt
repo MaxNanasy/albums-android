@@ -965,7 +965,7 @@ class MainActivity : AppCompatActivity() {
             val refreshStatusMessage = if (response.failureReason != null) {
                 "Network issue refreshing Spotify session. Please reconnect if this continues."
             } else {
-                "Unable to validate Spotify session. Please reconnect."
+                "Unable to restore Spotify session. Please reconnect."
             }
             reportError(
                 statusView = authStatus,
@@ -976,7 +976,7 @@ class MainActivity : AppCompatActivity() {
         val token = parseTokenResponse(response.body) ?: run {
             reportError(
                 statusView = authStatus,
-                statusMessage = "Unable to validate Spotify session. Please reconnect.",
+                statusMessage = "Unable to restore Spotify session. Please reconnect.",
             )
             return null
         }
