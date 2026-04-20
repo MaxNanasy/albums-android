@@ -609,7 +609,7 @@ class MainActivity : AppCompatActivity() {
                     cooldownKey = "monitor-failure-detached",
                 )
             } else {
-                playbackStatus.text = "Unable to check playback state right now."
+                playbackStatus.text = "Playback monitor encountered an error: $failure"
                 reportError(
                     toastMessage = "Playback monitor encountered an error.",
                     cooldownKey = "monitor-failure-recoverable",
@@ -618,7 +618,8 @@ class MainActivity : AppCompatActivity() {
             return
         }
         val snapshot = snapshotResult.snapshot ?: run {
-            playbackStatus.text = "Unable to check playback state right now."
+            val failure = "missing playback snapshot."
+            playbackStatus.text = "Playback monitor encountered an error: $failure"
             reportError(
                 toastMessage = "Playback monitor encountered an error.",
                 cooldownKey = "monitor-failure-recoverable",
