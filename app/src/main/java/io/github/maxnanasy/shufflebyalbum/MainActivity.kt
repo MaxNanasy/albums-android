@@ -357,7 +357,11 @@ class MainActivity : AppCompatActivity() {
         if (uri == null || uri.scheme != "shufflebyalbum") return false
         val error = uri.getQueryParameter("error")
         if (error != null) {
-            authStatus.text = "Spotify authorization error: $error"
+            authStatus.text = if (error == "access_denied") {
+                "Spotify authorization denied."
+            } else {
+                "Spotify authorization error: $error"
+            }
             prefs.edit().remove(KEY_VERIFIER).apply()
             return true
         }
