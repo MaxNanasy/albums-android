@@ -69,22 +69,42 @@ abstract class AbstractUiTestCase {
         val deadline = SystemClock.elapsedRealtime() + timeoutMs
         var lastError: Throwable? = null
         var lastStateDescription = ""
+        var hasLastState = false
+        val describeUnavailableWaitState: (Throwable) -> String = { error ->
+            val type = error::class.java.simpleName.ifBlank { "Exception" }
+            val detail = error.message?.takeIf { it.isNotBlank() }
+            if (detail == null) {
+                "<unavailable: $type>"
+            } else {
+                "<unavailable: $type: $detail>"
+            }
+        }
         while (SystemClock.elapsedRealtime() < deadline) {
-            try {
+            val currentState = try {
                 InstrumentationRegistry.getInstrumentation().waitForIdleSync()
-                val currentState = state()
+                state()
+            } catch (error: Throwable) {
+                lastError = error
+                SystemClock.sleep(intervalMs)
+                continue
+            }
+            val currentStateDescription = runCatching { currentState?.toString().orEmpty() }
+                .getOrElse(describeUnavailableWaitState)
+            try {
                 assertion(currentState)
                 return
             } catch (error: Throwable) {
-                lastStateDescription = formatWaitState(currentState)
+                lastStateDescription = currentStateDescription
+                hasLastState = true
                 lastError = error
                 SystemClock.sleep(intervalMs)
             }
         }
-        val stateDescription = runCatching(state)
-            .map(::formatWaitState)
-            .getOrElse(::describeUnavailableWaitState)
-        val suffix = if (stateDescription.isBlank()) "" else " Last state: $stateDescription"
+        val suffix = if (hasLastState && lastStateDescription.isNotBlank()) {
+            " Last state: $lastStateDescription"
+        } else {
+            ""
+        }
         throw AssertionError("Timed out waiting for $label.$suffix", lastError)
     }
 
@@ -94,20 +114,6 @@ abstract class AbstractUiTestCase {
             text = activity.findViewById<TextView>(viewId)?.text?.toString()
         }
         return text
-    }
-
-    private fun formatWaitState(state: Any?): String {
-        return state?.toString().orEmpty()
-    }
-
-    private fun describeUnavailableWaitState(error: Throwable): String {
-        val type = error::class.java.simpleName.ifBlank { "Exception" }
-        val detail = error.message?.takeIf { it.isNotBlank() }
-        return if (detail == null) {
-            "<unavailable: $type>"
-        } else {
-            "<unavailable: $type: $detail>"
-        }
     }
 }
 
