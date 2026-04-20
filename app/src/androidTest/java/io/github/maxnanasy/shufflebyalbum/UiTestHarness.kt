@@ -2,6 +2,8 @@ package io.github.maxnanasy.shufflebyalbum
 
 import android.content.Context
 import android.os.SystemClock
+import android.widget.TextView
+import androidx.annotation.IdRes
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.platform.app.InstrumentationRegistry
@@ -44,8 +46,10 @@ abstract class AbstractUiTestCase {
     }
 
     protected inline fun waitUntil(
+        label: String = "condition",
         timeoutMs: Long = 5_000L,
         intervalMs: Long = 50L,
+        crossinline state: () -> String = { "" },
         crossinline assertion: () -> Unit,
     ) {
         val deadline = SystemClock.elapsedRealtime() + timeoutMs
@@ -60,7 +64,25 @@ abstract class AbstractUiTestCase {
                 SystemClock.sleep(intervalMs)
             }
         }
-        throw AssertionError("Condition was not met before timeout.", lastError)
+        val stateDescription = runCatching(state).getOrElse { error ->
+            val type = error::class.java.simpleName.ifBlank { "Exception" }
+            val detail = error.message?.takeIf { it.isNotBlank() }
+            if (detail == null) {
+                "<unavailable: $type>"
+            } else {
+                "<unavailable: $type: $detail>"
+            }
+        }
+        val suffix = if (stateDescription.isBlank()) "" else " Last state: $stateDescription"
+        throw AssertionError("Timed out waiting for $label.$suffix", lastError)
+    }
+
+    protected fun textOf(@IdRes viewId: Int): String? {
+        var text: String? = null
+        scenario?.onActivity { activity ->
+            text = activity.findViewById<TextView>(viewId)?.text?.toString()
+        }
+        return text
     }
 }
 

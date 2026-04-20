@@ -71,13 +71,23 @@ class AddPlusStartUiTest : AbstractUiTestCase() {
 
         onView(withId(R.id.startButton)).perform(scrollTo(), click())
 
-        waitUntil {
+        waitUntil(
+            label = "playback status to show the current album",
+            state = {
+                "playbackStatus=${textOf(R.id.playbackStatus)}; commands=${harness.spotifyAppRemoteService.commands}"
+            },
+        ) {
             onView(withId(R.id.playbackStatus)).check(
                 matches(withText(startsWith("Now playing album 1 of 3: "))),
             )
         }
 
-        waitUntil {
+        waitUntil(
+            label = "Spotify App Remote commands for playback start",
+            state = {
+                "commands=${harness.spotifyAppRemoteService.commands}; playbackStatus=${textOf(R.id.playbackStatus)}"
+            },
+        ) {
             check(harness.spotifyAppRemoteService.commands.size == 3)
             check(
                 harness.spotifyAppRemoteService.commands[0] ==
