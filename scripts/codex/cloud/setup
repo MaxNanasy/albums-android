@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+set -x
+
+setup_android_sdk() {
+  repo_dir="$PWD"
+  sdk_dir="$HOME/android-sdk"
+  cmdline_tools_zip_url="https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
+
+  android_packages=(
+    "platform-tools"
+  )
+
+  mkdir -p "$sdk_dir/cmdline-tools"
+
+  tmp_dir="$(mktemp -d)"
+  trap 'rm -rf "$tmp_dir"' EXIT
+
+  echo "Downloading Android command-line tools..."
+  curl -fL "$cmdline_tools_zip_url" -o "$tmp_dir/cmdline-tools.zip"
+
+  echo "Unpacking command-line tools..."
+  unzip -q "$tmp_dir/cmdline-tools.zip" -d "$tmp_dir/unpacked"
+
+  rm -rf "$sdk_dir/cmdline-tools/latest"
+  mv "$tmp_dir/unpacked/cmdline-tools" "$sdk_dir/cmdline-tools/latest"
+
+  sdkmanager_bin="$sdk_dir/cmdline-tools/latest/bin/sdkmanager"
+
+  echo "Accepting licenses..."
+  { yes || true; } | "$sdkmanager_bin" --sdk_root="$sdk_dir" --licenses >/dev/null
+
+  echo "Installing required Android SDK packages..."
+  "$sdkmanager_bin" --sdk_root="$sdk_dir" "${android_packages[@]}"
+
+  echo "Writing local.properties..."
+  mkdir -p "$repo_dir"
+  printf 'sdk.dir=%s\n' "$sdk_dir" > "$repo_dir/local.properties"
+
+  echo "Done."
+  echo "SDK installed at: $sdk_dir"
+  echo "local.properties written at: $repo_dir/local.properties"
+}
+
+cache_gradle_and_dependencies() {
+  if [ -x gradlew ]; then
+    ./gradlew --no-daemon check || true
+  fi
+}
+
+setup_android_sdk
+cache_gradle_and_dependencies
