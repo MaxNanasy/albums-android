@@ -49,30 +49,39 @@ abstract class AbstractUiTestCase {
         label: String = "condition",
         timeoutMs: Long = 5_000L,
         intervalMs: Long = 50L,
-        crossinline state: () -> String = { "" },
         crossinline assertion: () -> Unit,
+    ) {
+        waitUntil(
+            label = label,
+            timeoutMs = timeoutMs,
+            intervalMs = intervalMs,
+            state = { Unit },
+        ) { assertion() }
+    }
+
+    protected inline fun <T> waitUntil(
+        label: String = "condition",
+        timeoutMs: Long = 5_000L,
+        intervalMs: Long = 50L,
+        crossinline state: () -> T,
+        crossinline assertion: (T) -> Unit,
     ) {
         val deadline = SystemClock.elapsedRealtime() + timeoutMs
         var lastError: Throwable? = null
         while (SystemClock.elapsedRealtime() < deadline) {
             try {
                 InstrumentationRegistry.getInstrumentation().waitForIdleSync()
-                assertion()
+                val currentState = state()
+                assertion(currentState)
                 return
             } catch (error: Throwable) {
                 lastError = error
                 SystemClock.sleep(intervalMs)
             }
         }
-        val stateDescription = runCatching(state).getOrElse { error ->
-            val type = error::class.java.simpleName.ifBlank { "Exception" }
-            val detail = error.message?.takeIf { it.isNotBlank() }
-            if (detail == null) {
-                "<unavailable: $type>"
-            } else {
-                "<unavailable: $type: $detail>"
-            }
-        }
+        val stateDescription = runCatching(state)
+            .map(::formatWaitState)
+            .getOrElse(::describeUnavailableWaitState)
         val suffix = if (stateDescription.isBlank()) "" else " Last state: $stateDescription"
         throw AssertionError("Timed out waiting for $label.$suffix", lastError)
     }
@@ -83,6 +92,20 @@ abstract class AbstractUiTestCase {
             text = activity.findViewById<TextView>(viewId)?.text?.toString()
         }
         return text
+    }
+
+    private fun formatWaitState(state: Any?): String {
+        return state?.toString().orEmpty()
+    }
+
+    private fun describeUnavailableWaitState(error: Throwable): String {
+        val type = error::class.java.simpleName.ifBlank { "Exception" }
+        val detail = error.message?.takeIf { it.isNotBlank() }
+        return if (detail == null) {
+            "<unavailable: $type>"
+        } else {
+            "<unavailable: $type: $detail>"
+        }
     }
 }
 

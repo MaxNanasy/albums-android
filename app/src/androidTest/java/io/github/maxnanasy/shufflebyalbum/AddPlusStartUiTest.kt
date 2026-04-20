@@ -78,32 +78,26 @@ class AddPlusStartUiTest : AbstractUiTestCase() {
 
         waitUntil(
             label = "playback status to show the current album",
-            state = {
-                "playbackStatus=${textOf(R.id.playbackStatus)}; commands=${harness.spotifyAppRemoteService.commands}"
-            },
-        ) {
-            onView(withId(R.id.playbackStatus)).check(
-                matches(withText(startsWith("Now playing album 1 of 3: "))),
-            )
+            state = { textOf(R.id.playbackStatus) },
+        ) { playbackStatus ->
+            check(playbackStatus?.startsWith("Now playing album 1 of 3: ") == true)
         }
 
         waitUntil(
             label = "Spotify App Remote commands for playback start",
-            state = {
-                "commands=${harness.spotifyAppRemoteService.commands}; playbackStatus=${textOf(R.id.playbackStatus)}"
-            },
-        ) {
-            check(harness.spotifyAppRemoteService.commands.size == 3)
+            state = { harness.spotifyAppRemoteService.commands.toList() },
+        ) { commands ->
+            check(commands.size == 3)
             check(
-                harness.spotifyAppRemoteService.commands[0] ==
+                commands[0] ==
                     TestSpotifyAppRemoteService.PlayerCommand.SetShuffle(enabled = false),
             )
             check(
-                harness.spotifyAppRemoteService.commands[1] ==
+                commands[1] ==
                     TestSpotifyAppRemoteService.PlayerCommand.SetRepeat(mode = Repeat.OFF),
             )
             check(
-                harness.spotifyAppRemoteService.commands[2] is
+                commands[2] is
                     TestSpotifyAppRemoteService.PlayerCommand.Play,
             )
         }
