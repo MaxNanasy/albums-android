@@ -43,7 +43,12 @@ class AddPlusStartUiTest : AbstractUiTestCase() {
         )
         onView(withId(R.id.addButton)).perform(click())
 
-        waitUntil {
+        waitUntil(
+            label = "added album to appear in the list",
+            state = {
+                "playbackStatus=${textOf(R.id.playbackStatus)}; itemUriInput=${textOf(R.id.itemUriInput)}"
+            },
+        ) {
             onView(withText("Test Album")).check(matches(isDisplayed()))
         }
     }
