@@ -618,7 +618,7 @@ class MainActivity : AppCompatActivity() {
             return
         }
         val snapshot = snapshotResult.snapshot ?: run {
-            val failure = "missing playback snapshot."
+            val failure = "Missing playback snapshot."
             playbackStatus.text = "Playback monitor encountered an error: $failure"
             reportError(
                 toastMessage = "Playback monitor encountered an error.",
