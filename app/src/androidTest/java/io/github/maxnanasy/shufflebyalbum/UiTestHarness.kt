@@ -68,6 +68,7 @@ abstract class AbstractUiTestCase {
     ) {
         val deadline = SystemClock.elapsedRealtime() + timeoutMs
         var lastError: Throwable? = null
+        var lastStateDescription = ""
         while (SystemClock.elapsedRealtime() < deadline) {
             try {
                 InstrumentationRegistry.getInstrumentation().waitForIdleSync()
@@ -75,6 +76,7 @@ abstract class AbstractUiTestCase {
                 assertion(currentState)
                 return
             } catch (error: Throwable) {
+                lastStateDescription = formatWaitState(currentState)
                 lastError = error
                 SystemClock.sleep(intervalMs)
             }
