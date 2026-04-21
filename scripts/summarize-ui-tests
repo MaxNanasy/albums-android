@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import glob
 import os
 import sys
 import xml.etree.ElementTree as ET
@@ -84,35 +83,22 @@ def summarize(xml_path: Path) -> list[str]:
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) != 2:
-        write_summary([
-            '# Test Summary',
-            '',
-            'Expected exactly one XML glob pattern argument.',
-        ])
-        return 0
-
-    matches = sorted(glob.glob(argv[1]))
-    if not matches:
-        write_summary([
-            '# Test Summary',
-            '',
-            f'No UI test XML report matched `{argv[1]}`.',
-        ])
-        return 0
-
-    if len(matches) > 1:
+    xml_paths = argv[1:]
+    if len(xml_paths) != 1:
         lines = [
             '# Test Summary',
             '',
-            f'Expected one UI test XML report, found {len(matches)}:',
-            '',
+            f'Expected exactly one XML report path argument, found {len(xml_paths)}.',
         ]
-        lines.extend(f'- `{match}`' for match in matches)
+        if xml_paths:
+            lines.append('')
+            lines.append('Provided arguments:')
+            lines.append('')
+            lines.extend(f'- `{xml_path}`' for xml_path in xml_paths)
         write_summary(lines)
         return 0
 
-    xml_path = Path(matches[0])
+    xml_path = Path(xml_paths[0])
     try:
         write_summary(summarize(xml_path))
     except ET.ParseError as exc:

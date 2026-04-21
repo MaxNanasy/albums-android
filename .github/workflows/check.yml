@@ -65,7 +65,11 @@ jobs:
 
       - name: Write Android UI test summary
         if: always()
-        run: ./scripts/summarize-ui-tests 'app/build/outputs/androidTest-results/connected/uiTest/TEST-*.xml'
+        shell: bash
+        run: |
+          shopt -s nullglob
+          reports=(app/build/outputs/androidTest-results/connected/uiTest/TEST-*.xml)
+          ./scripts/summarize-ui-tests "${reports[@]}"
 
       - name: Upload Android UI test reports
         if: always()
