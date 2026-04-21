@@ -62,3 +62,13 @@ jobs:
           target: google_apis
           arch: x86_64
           script: ./gradlew --no-daemon connectedCheck
+
+      - name: Upload Android UI test reports
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: android-ui-test-reports
+          path: |
+            app/build/reports/androidTests/connected/
+            app/build/outputs/androidTest-results/connected/
+          if-no-files-found: warn
