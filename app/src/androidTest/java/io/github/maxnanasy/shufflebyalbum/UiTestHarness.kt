@@ -2,6 +2,8 @@ package io.github.maxnanasy.shufflebyalbum
 
 import android.content.Context
 import android.os.SystemClock
+import android.widget.TextView
+import androidx.annotation.IdRes
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.platform.app.InstrumentationRegistry
@@ -44,23 +46,74 @@ abstract class AbstractUiTestCase {
     }
 
     protected inline fun waitUntil(
+        label: String = "condition",
         timeoutMs: Long = 5_000L,
         intervalMs: Long = 50L,
         crossinline assertion: () -> Unit,
     ) {
+        waitUntil(
+            label = label,
+            timeoutMs = timeoutMs,
+            intervalMs = intervalMs,
+            state = { Unit },
+        ) { assertion() }
+    }
+
+    protected inline fun <T> waitUntil(
+        label: String = "condition",
+        timeoutMs: Long = 5_000L,
+        intervalMs: Long = 50L,
+        crossinline state: () -> T,
+        crossinline assertion: (T) -> Unit,
+    ) {
         val deadline = SystemClock.elapsedRealtime() + timeoutMs
         var lastError: Throwable? = null
+        var lastStateDescription = ""
+        var hasLastState = false
+        val describeUnavailableWaitState: (Throwable) -> String = { error ->
+            val type = error::class.java.simpleName.ifBlank { "Exception" }
+            val detail = error.message?.takeIf { it.isNotBlank() }
+            if (detail == null) {
+                "<unavailable: $type>"
+            } else {
+                "<unavailable: $type: $detail>"
+            }
+        }
         while (SystemClock.elapsedRealtime() < deadline) {
-            try {
+            val currentState = try {
                 InstrumentationRegistry.getInstrumentation().waitForIdleSync()
-                assertion()
+                state()
+            } catch (error: Throwable) {
+                lastError = error
+                SystemClock.sleep(intervalMs)
+                continue
+            }
+            val currentStateDescription = runCatching { currentState?.toString().orEmpty() }
+                .getOrElse(describeUnavailableWaitState)
+            try {
+                assertion(currentState)
                 return
             } catch (error: Throwable) {
+                lastStateDescription = currentStateDescription
+                hasLastState = true
                 lastError = error
                 SystemClock.sleep(intervalMs)
             }
         }
-        throw AssertionError("Condition was not met before timeout.", lastError)
+        val suffix = if (hasLastState && lastStateDescription.isNotBlank()) {
+            " Last state: $lastStateDescription"
+        } else {
+            ""
+        }
+        throw AssertionError("Timed out waiting for $label.$suffix", lastError)
+    }
+
+    protected fun textOf(@IdRes viewId: Int): String? {
+        var text: String? = null
+        scenario?.onActivity { activity ->
+            text = activity.findViewById<TextView>(viewId)?.text?.toString()
+        }
+        return text
     }
 }
 

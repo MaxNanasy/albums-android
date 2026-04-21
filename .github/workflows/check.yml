@@ -62,3 +62,21 @@ jobs:
           target: google_apis
           arch: x86_64
           script: ./gradlew --no-daemon connectedCheck
+
+      - name: Write test summary
+        if: always()
+        shell: bash
+        run: |
+          shopt -s nullglob
+          reports=(app/build/outputs/androidTest-results/connected/uiTest/TEST-*.xml)
+          ./scripts/summarize-ui-tests "${reports[@]}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: android-ui-test-reports
+          path: |
+            app/build/reports/androidTests/connected/
+            app/build/outputs/androidTest-results/connected/
+          if-no-files-found: warn

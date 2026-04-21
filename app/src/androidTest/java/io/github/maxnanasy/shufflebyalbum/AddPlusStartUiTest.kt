@@ -43,7 +43,9 @@ class AddPlusStartUiTest : AbstractUiTestCase() {
         )
         onView(withId(R.id.addButton)).perform(click())
 
-        waitUntil {
+        waitUntil(
+            label = "added album to appear in the list",
+        ) {
             onView(withText("Test Album")).check(matches(isDisplayed()))
         }
     }
@@ -71,24 +73,28 @@ class AddPlusStartUiTest : AbstractUiTestCase() {
 
         onView(withId(R.id.startButton)).perform(scrollTo(), click())
 
-        waitUntil {
-            onView(withId(R.id.playbackStatus)).check(
-                matches(withText(startsWith("Now playing album 1 of 3: "))),
-            )
+        waitUntil(
+            label = "playback status to show the current album",
+            state = { textOf(R.id.playbackStatus) },
+        ) { playbackStatus ->
+            check(playbackStatus?.startsWith("Now playing album 1 of 3: ") == true)
         }
 
-        waitUntil {
-            check(harness.spotifyAppRemoteService.commands.size == 3)
+        waitUntil(
+            label = "Spotify App Remote commands for playback start",
+            state = { harness.spotifyAppRemoteService.commands.toList() },
+        ) { commands ->
+            check(commands.size == 3)
             check(
-                harness.spotifyAppRemoteService.commands[0] ==
+                commands[0] ==
                     TestSpotifyAppRemoteService.PlayerCommand.SetShuffle(enabled = false),
             )
             check(
-                harness.spotifyAppRemoteService.commands[1] ==
+                commands[1] ==
                     TestSpotifyAppRemoteService.PlayerCommand.SetRepeat(mode = Repeat.OFF),
             )
             check(
-                harness.spotifyAppRemoteService.commands[2] is
+                commands[2] is
                     TestSpotifyAppRemoteService.PlayerCommand.Play,
             )
         }
