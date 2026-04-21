@@ -100,7 +100,7 @@ def main(argv: list[str]) -> int:
     except ET.ParseError as exc:
         sys.stdout.write(
             format_summary([
-                '# Test Summary',
+                '# UI Tests Summary',
                 '',
                 f'Could not parse `{xml_path}`: {exc}',
             ])
