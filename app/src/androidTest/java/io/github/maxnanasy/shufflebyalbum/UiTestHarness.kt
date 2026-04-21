@@ -12,7 +12,9 @@ import com.spotify.android.appremote.api.PlayerApi
 import com.spotify.protocol.client.CallResult
 import com.spotify.protocol.types.Types
 import java.io.IOException
+import java.lang.IllegalStateException
 import java.lang.reflect.Proxy
+import java.util.concurrent.atomic.AtomicReference
 import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -123,10 +125,14 @@ class UiTestHarness : AutoCloseable {
     val server = MockWebServer()
     val spotifyAppRemoteService = TestSpotifyAppRemoteService()
     val playbackMonitorLoop = TestPlaybackMonitorLoop()
+    private val unexpectedRequestFailure = AtomicReference<AssertionError?>(null)
     private var started = false
 
     fun start() {
         clearAppState()
+        server.dispatcher = failOnUnexpectedRequests(
+            reason = "This test did not call harness.setDispatcher(...).",
+        )
         server.start()
         started = true
         MainActivity.spotifyAccountsBaseUrl = server.url("/").toString().removeSuffix("/")
@@ -136,7 +142,12 @@ class UiTestHarness : AutoCloseable {
     }
 
     fun setDispatcher(dispatcher: Dispatcher) {
-        server.dispatcher = dispatcher
+        server.dispatcher = dispatcher.withUnexpectedRequestFailure { request ->
+            failRequest(
+                request = request,
+                reason = "No matching handler was configured for this request.",
+            )
+        }
     }
 
     fun enqueueJson(body: String, statusCode: Int = 200): MockResponse {
@@ -179,6 +190,7 @@ class UiTestHarness : AutoCloseable {
         prefs.edit().clear().commit()
         spotifyAppRemoteService.reset()
         playbackMonitorLoop.reset()
+        unexpectedRequestFailure.set(null)
         MainActivity.spotifyAccountsBaseUrl = DEFAULT_SPOTIFY_ACCOUNTS_BASE_URL
         MainActivity.spotifyApiBaseUrl = DEFAULT_SPOTIFY_API_BASE_URL
         MainActivity.spotifyAppRemoteService = spotifyAppRemoteService
@@ -186,6 +198,7 @@ class UiTestHarness : AutoCloseable {
     }
 
     override fun close() {
+        val failure = unexpectedRequestFailure.get()
         clearAppState()
         if (started) {
             try {
@@ -195,6 +208,31 @@ class UiTestHarness : AutoCloseable {
             }
             started = false
         }
+        failure?.let { throw it }
+    }
+
+    private fun failOnUnexpectedRequests(reason: String): Dispatcher {
+        return object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                return failRequest(request = request, reason = reason)
+            }
+        }
+    }
+
+    private fun failRequest(request: RecordedRequest, reason: String): MockResponse {
+        val message = buildString {
+            append("Unexpected mock Spotify request: ")
+            append(request.method ?: "<unknown method>")
+            append(' ')
+            append(request.path ?: "<unknown path>")
+            append(". ")
+            append(reason)
+        }
+        unexpectedRequestFailure.compareAndSet(null, AssertionError(message))
+        return MockResponse()
+            .setResponseCode(500)
+            .setHeader("Content-Type", "text/plain")
+            .setBody(message)
     }
 
     companion object {
@@ -358,10 +396,42 @@ private class ImmediateCallResult<T>(
     }
 }
 
-fun jsonDispatcher(handler: (RecordedRequest) -> MockResponse): Dispatcher {
+fun jsonDispatcher(configure: JsonDispatcherBuilder.() -> Unit): Dispatcher {
+    return JsonDispatcherBuilder().apply(configure)
+}
+
+class JsonDispatcherBuilder : Dispatcher() {
+    private val routes = linkedMapOf<String, (RecordedRequest) -> MockResponse>()
+
+    fun route(path: String, response: MockResponse) {
+        route(path) { response.clone() }
+    }
+
+    fun route(path: String, handler: (RecordedRequest) -> MockResponse) {
+        check(routes.put(path, handler) == null) { "A handler is already configured for $path." }
+    }
+
+    override fun dispatch(request: RecordedRequest): MockResponse {
+        val handler = routes[request.path]
+            ?: throw UnhandledMockRequestException(request)
+        return handler(request)
+    }
+}
+
+private class UnhandledMockRequestException(
+    val request: RecordedRequest,
+) : IllegalStateException("No handler configured for ${request.path}")
+
+private fun Dispatcher.withUnexpectedRequestFailure(
+    onUnexpectedRequest: (RecordedRequest) -> MockResponse,
+): Dispatcher {
     return object : Dispatcher() {
         override fun dispatch(request: RecordedRequest): MockResponse {
-            return handler(request)
+            return try {
+                this@withUnexpectedRequestFailure.dispatch(request)
+            } catch (error: UnhandledMockRequestException) {
+                onUnexpectedRequest(error.request)
+            }
         }
     }
 }

@@ -26,13 +26,10 @@ class PlaybackMonitorUiTest : AbstractUiTestCase() {
         )
         val playbackMonitorRequests = AtomicInteger(0)
         harness.setDispatcher(
-            jsonDispatcher { request ->
-                when (request.path) {
-                    "/v1/me/player" -> {
-                        playbackMonitorRequests.incrementAndGet()
-                        MockResponse().setResponseCode(204)
-                    }
-                    else -> MockResponse().setResponseCode(404)
+            jsonDispatcher {
+                route("/v1/me/player") {
+                    playbackMonitorRequests.incrementAndGet()
+                    MockResponse().setResponseCode(204)
                 }
             },
         )
