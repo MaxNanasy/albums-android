@@ -12,12 +12,8 @@ def local_name(tag: str) -> str:
     return tag.split('}', 1)[-1]
 
 
-def write_summary(lines: list[str]) -> None:
-    summary_path = os.environ.get('GITHUB_STEP_SUMMARY')
-    if not summary_path:
-        raise SystemExit('GITHUB_STEP_SUMMARY is not set')
-
-    Path(summary_path).write_text('\n'.join(lines) + '\n', encoding='utf-8')
+def format_summary(lines: list[str]) -> str:
+    return '\n'.join(lines) + '\n'
 
 
 def summarize(xml_path: Path) -> list[str]:
@@ -95,18 +91,20 @@ def main(argv: list[str]) -> int:
             lines.append('Provided arguments:')
             lines.append('')
             lines.extend(f'- `{xml_path}`' for xml_path in xml_paths)
-        write_summary(lines)
+        sys.stdout.write(format_summary(lines))
         return 0
 
     xml_path = Path(xml_paths[0])
     try:
-        write_summary(summarize(xml_path))
+        sys.stdout.write(format_summary(summarize(xml_path)))
     except ET.ParseError as exc:
-        write_summary([
-            '# Test Summary',
-            '',
-            f'Could not parse `{xml_path}`: {exc}',
-        ])
+        sys.stdout.write(
+            format_summary([
+                '# Test Summary',
+                '',
+                f'Could not parse `{xml_path}`: {exc}',
+            ])
+        )
         return 0
 
     return 0
