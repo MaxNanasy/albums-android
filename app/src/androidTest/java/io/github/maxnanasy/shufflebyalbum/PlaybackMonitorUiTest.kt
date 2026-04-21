@@ -38,22 +38,31 @@ class PlaybackMonitorUiTest : AbstractUiTestCase() {
 
         onView(withId(R.id.startButton)).perform(scrollTo(), click())
 
-        waitUntil(label = "playback monitor tick to be scheduled") {
-            check(harness.playbackMonitorLoop.hasScheduledTick())
-            check(harness.playbackMonitorLoop.intervalMs == 4_000L)
+        waitUntil(
+            label = "playback monitor tick to be scheduled",
+            state = { harness.playbackMonitorLoop.hasScheduledTick() to harness.playbackMonitorLoop.intervalMs },
+        ) { (hasScheduledTick, intervalMs) ->
+            check(hasScheduledTick)
+            check(intervalMs == 4_000L)
         }
         check(playbackMonitorRequests.get() == 0)
 
         harness.playbackMonitorLoop.triggerTick()
 
-        waitUntil(label = "first playback monitor poll") {
-            check(playbackMonitorRequests.get() == 1)
+        waitUntil(
+            label = "first playback monitor poll",
+            state = { playbackMonitorRequests.get() },
+        ) { requestCount ->
+            check(requestCount == 1)
         }
 
         harness.playbackMonitorLoop.triggerTick()
 
-        waitUntil(label = "second playback monitor poll") {
-            check(playbackMonitorRequests.get() == 2)
+        waitUntil(
+            label = "second playback monitor poll",
+            state = { playbackMonitorRequests.get() },
+        ) { requestCount ->
+            check(requestCount == 2)
         }
     }
 }
