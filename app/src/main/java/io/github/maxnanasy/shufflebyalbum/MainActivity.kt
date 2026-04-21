@@ -77,15 +77,8 @@ class MainActivity : AppCompatActivity() {
     private var spotifyAppRemote: AppRemote? = null
     private var connectingAppRemote = false
 
-    private val monitorHandler = Handler(Looper.getMainLooper())
-    private val monitorTask = object : Runnable {
-        override fun run() {
-            appScope.launch {
-                monitorPlayback()
-            }
-            monitorHandler.postDelayed(this, 4000)
-        }
-    }
+    private val uiHandler = Handler(Looper.getMainLooper())
+    private val playbackMonitorLoop by lazy { playbackMonitorLoopFactory() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -679,11 +672,17 @@ class MainActivity : AppCompatActivity() {
 
     private fun startMonitorLoop() {
         stopMonitorLoop()
-        monitorHandler.postDelayed(monitorTask, 4000)
+        playbackMonitorLoop.start(
+            intervalMs = PLAYBACK_MONITOR_INTERVAL_MS,
+        ) {
+            appScope.launch {
+                monitorPlayback()
+            }
+        }
     }
 
     private fun stopMonitorLoop() {
-        monitorHandler.removeCallbacks(monitorTask)
+        playbackMonitorLoop.stop()
     }
 
     private fun removeItem(item: ShuffleItem) {
@@ -717,12 +716,12 @@ class MainActivity : AppCompatActivity() {
         pendingRemovals[removalId] = removal
         undoBannerContainer.addView(bannerView, 0)
         undoButton.setOnClickListener { undoPendingRemoval(removalId) }
-        monitorHandler.postDelayed(dismissRunnable, UNDO_BANNER_DURATION_MS)
+        uiHandler.postDelayed(dismissRunnable, UNDO_BANNER_DURATION_MS)
     }
 
     private fun undoPendingRemoval(removalId: Long) {
         val removal = pendingRemovals.remove(removalId) ?: return
-        monitorHandler.removeCallbacks(removal.dismissRunnable)
+        uiHandler.removeCallbacks(removal.dismissRunnable)
         undoBannerContainer.removeView(removal.bannerView)
         val currentItems = getItems().toMutableList()
         if (currentItems.any { it.uri == removal.item.uri }) {
@@ -1362,6 +1361,8 @@ class MainActivity : AppCompatActivity() {
         internal var spotifyAccountsBaseUrl = "https://accounts.spotify.com"
         internal var spotifyApiBaseUrl = "https://api.spotify.com/v1"
         internal var spotifyAppRemoteService: SpotifyAppRemoteService = RealSpotifyAppRemoteService
+        internal val defaultPlaybackMonitorLoopFactory: () -> PlaybackMonitorLoop = { HandlerPlaybackMonitorLoop() }
+        internal var playbackMonitorLoopFactory: () -> PlaybackMonitorLoop = defaultPlaybackMonitorLoopFactory
 
         private val SCOPES = listOf(
             "user-modify-playback-state",
@@ -1378,8 +1379,36 @@ class MainActivity : AppCompatActivity() {
         private const val KEY_TOKEN_SCOPE = "shuffle-by-album.tokenScope"
         private const val KEY_ITEMS = "shuffle-by-album.items"
         private const val KEY_RUNTIME = "shuffle-by-album.runtime"
+        private const val PLAYBACK_MONITOR_INTERVAL_MS = 4_000L
         private const val UNDO_BANNER_DURATION_MS = 5_000L
         private const val ERROR_TOAST_COOLDOWN_MS = 45_000L
+    }
+}
+
+internal interface PlaybackMonitorLoop {
+    fun start(intervalMs: Long, task: () -> Unit)
+
+    fun stop()
+}
+
+private class HandlerPlaybackMonitorLoop : PlaybackMonitorLoop {
+    private val handler = Handler(Looper.getMainLooper())
+    private var scheduledTask: Runnable? = null
+
+    override fun start(intervalMs: Long, task: () -> Unit) {
+        val repeatingTask = object : Runnable {
+            override fun run() {
+                task()
+                handler.postDelayed(this, intervalMs)
+            }
+        }
+        scheduledTask = repeatingTask
+        handler.postDelayed(repeatingTask, intervalMs)
+    }
+
+    override fun stop() {
+        scheduledTask?.let(handler::removeCallbacks)
+        scheduledTask = null
     }
 }
 

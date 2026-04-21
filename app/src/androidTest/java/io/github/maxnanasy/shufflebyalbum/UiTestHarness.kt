@@ -122,6 +122,7 @@ class UiTestHarness : AutoCloseable {
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     val server = MockWebServer()
     val spotifyAppRemoteService = TestSpotifyAppRemoteService()
+    val playbackMonitorLoop = TestPlaybackMonitorLoop()
     private var started = false
 
     fun start() {
@@ -131,6 +132,7 @@ class UiTestHarness : AutoCloseable {
         MainActivity.spotifyAccountsBaseUrl = server.url("/").toString().removeSuffix("/")
         MainActivity.spotifyApiBaseUrl = server.url("/v1").toString()
         MainActivity.spotifyAppRemoteService = spotifyAppRemoteService
+        MainActivity.playbackMonitorLoopFactory = { playbackMonitorLoop }
     }
 
     fun setDispatcher(dispatcher: Dispatcher) {
@@ -176,9 +178,11 @@ class UiTestHarness : AutoCloseable {
     fun clearAppState() {
         prefs.edit().clear().commit()
         spotifyAppRemoteService.reset()
+        playbackMonitorLoop.reset()
         MainActivity.spotifyAccountsBaseUrl = DEFAULT_SPOTIFY_ACCOUNTS_BASE_URL
         MainActivity.spotifyApiBaseUrl = DEFAULT_SPOTIFY_API_BASE_URL
         MainActivity.spotifyAppRemoteService = spotifyAppRemoteService
+        MainActivity.playbackMonitorLoopFactory = MainActivity.defaultPlaybackMonitorLoopFactory
     }
 
     override fun close() {
@@ -204,6 +208,37 @@ class UiTestHarness : AutoCloseable {
             "user-modify-playback-state user-read-playback-state playlist-read-private playlist-read-collaborative app-remote-control"
         private const val DEFAULT_SPOTIFY_ACCOUNTS_BASE_URL = "https://accounts.spotify.com"
         private const val DEFAULT_SPOTIFY_API_BASE_URL = "https://api.spotify.com/v1"
+    }
+}
+
+class TestPlaybackMonitorLoop : PlaybackMonitorLoop {
+    var intervalMs: Long? = null
+        private set
+    private var task: (() -> Unit)? = null
+
+    override fun start(intervalMs: Long, task: () -> Unit) {
+        this.intervalMs = intervalMs
+        this.task = task
+    }
+
+    override fun stop() {
+        task = null
+    }
+
+    fun hasScheduledTick(): Boolean {
+        return task != null
+    }
+
+    fun triggerTick() {
+        val currentTask = checkNotNull(task) { "No playback monitor tick is scheduled." }
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            currentTask()
+        }
+    }
+
+    fun reset() {
+        intervalMs = null
+        task = null
     }
 }
 
