@@ -63,6 +63,10 @@ jobs:
           arch: x86_64
           script: ./gradlew --no-daemon connectedCheck
 
+      - name: Write Android UI test summary
+        if: always()
+        run: ./scripts/summarize-ui-tests 'app/build/outputs/androidTest-results/connected/uiTest/TEST-*.xml'
+
       - name: Upload Android UI test reports
         if: always()
         uses: actions/upload-artifact@v6

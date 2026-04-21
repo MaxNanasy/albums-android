@@ -1,0 +1,130 @@
+#!/usr/bin/env python3
+
+from __future__ import annotations
+
+import glob
+import os
+import sys
+import xml.etree.ElementTree as ET
+from pathlib import Path
+
+
+def local_name(tag: str) -> str:
+    return tag.split('}', 1)[-1]
+
+
+def write_summary(lines: list[str]) -> None:
+    summary_path = os.environ.get('GITHUB_STEP_SUMMARY')
+    if not summary_path:
+        raise SystemExit('GITHUB_STEP_SUMMARY is not set')
+
+    Path(summary_path).write_text('\n'.join(lines) + '\n', encoding='utf-8')
+
+
+def summarize(xml_path: Path) -> list[str]:
+    root = ET.parse(xml_path).getroot()
+
+    failed = []
+    total = 0
+
+    for testcase in root.iter():
+        if local_name(testcase.tag) != 'testcase':
+            continue
+
+        total += 1
+        classname = testcase.attrib.get('classname', '')
+        name = testcase.attrib.get('name', '<unknown test>')
+        problems = [
+            child
+            for child in list(testcase)
+            if local_name(child.tag) in {'failure', 'error'}
+        ]
+        if not problems:
+            continue
+
+        details = []
+        for problem in problems:
+            message = (problem.attrib.get('message') or '').strip()
+            text = (problem.text or '').strip()
+
+            block_parts = [part for part in (message, text) if part]
+            details.append('\n\n'.join(block_parts) or '(no stack trace text provided)')
+
+        failed.append(
+            {
+                'classname': classname,
+                'name': name,
+                'details': '\n\n'.join(details),
+            }
+        )
+
+    lines = ['# Test Summary', '']
+
+    if not failed:
+        lines.append(f'All {total} test case(s) passed.')
+        return lines
+
+    lines.append(f'## Failed tests ({len(failed)}/{total})')
+    lines.append('')
+
+    for test in failed:
+        qualified_name = (
+            f"{test['classname']}.{test['name']}"
+            if test['classname']
+            else test['name']
+        )
+        lines.append(f'### `{qualified_name}`')
+        lines.append('')
+        lines.append('```text')
+        lines.append(test['details'])
+        lines.append('```')
+        lines.append('')
+
+    return lines
+
+
+def main(argv: list[str]) -> int:
+    if len(argv) != 2:
+        write_summary([
+            '# Test Summary',
+            '',
+            'Expected exactly one XML glob pattern argument.',
+        ])
+        return 0
+
+    matches = sorted(glob.glob(argv[1]))
+    if not matches:
+        write_summary([
+            '# Test Summary',
+            '',
+            f'No UI test XML report matched `{argv[1]}`.',
+        ])
+        return 0
+
+    if len(matches) > 1:
+        lines = [
+            '# Test Summary',
+            '',
+            f'Expected one UI test XML report, found {len(matches)}:',
+            '',
+        ]
+        lines.extend(f'- `{match}`' for match in matches)
+        write_summary(lines)
+        return 0
+
+    xml_path = Path(matches[0])
+    try:
+        write_summary(summarize(xml_path))
+    except ET.ParseError as exc:
+        write_summary([
+            '# Test Summary',
+            '',
+            f'Could not parse `{xml_path}`: {exc}',
+        ])
+        return 0
+
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(main(sys.argv))
