@@ -22,15 +22,12 @@ class AddPlusStartUiTest : AbstractUiTestCase() {
     fun addsAlbum() {
         harness.seedConnectedSession()
         harness.setDispatcher(
-            jsonDispatcher { request ->
-                when (request.path) {
-                    "/v1/albums/testAlbum" -> {
-                        MockResponse()
-                            .setResponseCode(200)
-                            .setHeader("Content-Type", "application/json")
-                            .setBody("""{"name":"Test Album"}""")
-                    }
-                    else -> MockResponse().setResponseCode(404)
+            jsonDispatcher {
+                route("/v1/albums/testAlbum") {
+                    MockResponse()
+                        .setResponseCode(200)
+                        .setHeader("Content-Type", "application/json")
+                        .setBody("""{"name":"Test Album"}""")
                 }
             },
         )
@@ -59,14 +56,6 @@ class AddPlusStartUiTest : AbstractUiTestCase() {
                 ShuffleItem(type = "album", uri = "spotify:album:albumTwo", title = "Album Two"),
                 ShuffleItem(type = "album", uri = "spotify:album:albumThree", title = "Album Three"),
             ),
-        )
-        harness.setDispatcher(
-            jsonDispatcher { request ->
-                when (request.path) {
-                    "/v1/me/player" -> MockResponse().setResponseCode(204)
-                    else -> MockResponse().setResponseCode(404)
-                }
-            },
         )
 
         launchMainActivity()
