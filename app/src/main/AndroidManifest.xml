@@ -26,7 +26,13 @@
                     android:host="callback"
                     android:scheme="shufflebyalbum" />
             </intent-filter>
+        </activity>
 
+        <activity
+            android:name=".ShareReceiverActivity"
+            android:exported="true"
+            android:label="@string/share_add_label"
+            android:theme="@android:style/Theme.NoDisplay">
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />

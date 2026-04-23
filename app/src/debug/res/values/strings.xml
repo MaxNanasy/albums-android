@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Shuffle By Album (Test)</string>
+    <string name="share_add_label">Add to Shuffle By Album (Test)</string>
 </resources>

@@ -349,7 +349,7 @@ class MainActivity : AppCompatActivity() {
 
     private suspend fun processSharedSpotifyItem(intent: Intent?) {
         val sharedItem = extractSharedSpotifyItem(intent) ?: return
-        addItem(sharedItem)
+        addItem(sharedItem, clearInput = false)
         setIntent(Intent())
     }
 
@@ -418,7 +418,7 @@ class MainActivity : AppCompatActivity() {
         addItem(parsed)
     }
 
-    private suspend fun addItem(parsed: ShuffleItem) {
+    private suspend fun addItem(parsed: ShuffleItem, clearInput: Boolean = true) {
         val items = getItems().toMutableList()
         if (items.any { it.uri == parsed.uri }) {
             removeRemovedItemByUri(parsed.uri)
@@ -434,7 +434,9 @@ class MainActivity : AppCompatActivity() {
         removeRemovedItemByUri(titled.uri)
         renderItemList()
         renderRemovedItems()
-        itemUriInput.setText("")
+        if (clearInput) {
+            itemUriInput.setText("")
+        }
         snackbar("Added ${quotedTitle(titled.title)}")
     }
 
