@@ -140,13 +140,6 @@
                     android:layout_marginTop="@dimen/control_vertical_spacing" />
 
                 <LinearLayout
-                    android:id="@+id/undoBannerContainer"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/control_vertical_spacing"
-                    android:orientation="vertical" />
-
-                <LinearLayout
                     android:id="@+id/removedItemsSection"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
