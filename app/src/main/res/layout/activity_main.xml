@@ -145,6 +145,48 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="@dimen/control_vertical_spacing"
                     android:orientation="vertical" />
+
+                <LinearLayout
+                    android:id="@+id/removedItemsSection"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/control_vertical_spacing"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Removed Items"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/removedItemsCount"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginEnd="@dimen/button_group_horizontal_spacing" />
+
+                        <com.google.android.material.button.MaterialButton
+                            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                            android:id="@+id/purgeRemovedItemsButton"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Purge" />
+                    </LinearLayout>
+
+                    <androidx.recyclerview.widget.RecyclerView
+                        android:id="@+id/removedItemsRecycler"
+                        android:layout_width="match_parent"
+                        android:layout_height="@dimen/item_list_height"
+                        android:layout_marginTop="@dimen/control_vertical_spacing" />
+                </LinearLayout>
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 

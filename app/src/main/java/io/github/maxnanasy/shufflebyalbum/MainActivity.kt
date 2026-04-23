@@ -17,6 +17,7 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.spotify.android.appremote.api.AppRemote
@@ -55,6 +56,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var itemUriInput: EditText
     private lateinit var storageJsonInput: EditText
     private lateinit var undoBannerContainer: LinearLayout
+    private lateinit var removedItemsSection: LinearLayout
+    private lateinit var removedItemsCount: TextView
+    private lateinit var purgeRemovedItemsButton: Button
+    private lateinit var removedItemsRecycler: RecyclerView
 
     private lateinit var connectButton: Button
     private lateinit var disconnectButton: Button
@@ -67,9 +72,11 @@ class MainActivity : AppCompatActivity() {
     private lateinit var exportStorageButton: Button
     private lateinit var importStorageButton: Button
 
-    private val itemAdapter = ItemAdapter(onRemove = ::removeItem)
+    private val itemAdapter = ItemActionAdapter(actionLabel = "Remove", onAction = ::removeItem)
+    private val removedItemsAdapter = ItemActionAdapter(actionLabel = "Restore", onAction = ::restoreRemovedItem)
     private val queueAdapter = QueueAdapter()
     private val pendingRemovals = mutableMapOf<Long, PendingRemoval>()
+    private val removedItems = mutableListOf<ShuffleItem>()
     private val errorToastCooldowns = mutableMapOf<String, Long>()
     private var nextPendingRemovalId: Long = 0
 
@@ -87,11 +94,14 @@ class MainActivity : AppCompatActivity() {
         setupLists()
         wireEvents()
 
+        removedItems.clear()
+        removedItems.addAll(getRemovedItems())
         restoreRuntimeState()
 
         appScope.launch {
             ensureUsableStartupAuth(intent?.data)
             renderItemList()
+            renderRemovedItems()
             renderQueue()
             renderPlaybackControls()
             ensureStoredItemTitles()
@@ -123,6 +133,10 @@ class MainActivity : AppCompatActivity() {
         itemUriInput = findViewById(R.id.itemUriInput)
         storageJsonInput = findViewById(R.id.storageJsonInput)
         undoBannerContainer = findViewById(R.id.undoBannerContainer)
+        removedItemsSection = findViewById(R.id.removedItemsSection)
+        removedItemsCount = findViewById(R.id.removedItemsCount)
+        purgeRemovedItemsButton = findViewById(R.id.purgeRemovedItemsButton)
+        removedItemsRecycler = findViewById(R.id.removedItemsRecycler)
 
         connectButton = findViewById(R.id.connectButton)
         disconnectButton = findViewById(R.id.disconnectButton)
@@ -144,6 +158,10 @@ class MainActivity : AppCompatActivity() {
         findViewById<RecyclerView>(R.id.queueRecycler).apply {
             layoutManager = LinearLayoutManager(this@MainActivity)
             adapter = queueAdapter
+        }
+        removedItemsRecycler.apply {
+            layoutManager = LinearLayoutManager(this@MainActivity)
+            adapter = removedItemsAdapter
         }
     }
 
@@ -172,6 +190,7 @@ class MainActivity : AppCompatActivity() {
         stopButton.setOnClickListener { stopSession("Session stopped.") }
         exportStorageButton.setOnClickListener { exportStorageJson() }
         importStorageButton.setOnClickListener { importStorageJson() }
+        purgeRemovedItemsButton.setOnClickListener { showPurgeRemovedItemsDialog() }
     }
 
     private fun refreshAuthStatus() {
@@ -388,6 +407,8 @@ class MainActivity : AppCompatActivity() {
 
         val items = getItems().toMutableList()
         if (items.any { it.uri == parsed.uri }) {
+            removeRemovedItemByUri(parsed.uri)
+            renderRemovedItems()
             return toast("Item is already in your list.")
         }
 
@@ -396,7 +417,9 @@ class MainActivity : AppCompatActivity() {
             ?: return toast("Unable to load title for that item. Please try another URI.")
         items.add(titled)
         saveItems(items)
+        removeRemovedItemByUri(titled.uri)
         renderItemList()
+        renderRemovedItems()
         itemUriInput.setText("")
         toast("Added ${quotedTitle(titled.title)}.")
     }
@@ -423,7 +446,9 @@ class MainActivity : AppCompatActivity() {
             }
         }
         saveItems(existing)
+        removeRemovedItemsByUris(albums.map { it.uri })
         renderItemList()
+        renderRemovedItems()
         toast("Imported $added album(s) from playlist (${albums.size} unique album(s) found).")
     }
 
@@ -692,8 +717,31 @@ class MainActivity : AppCompatActivity() {
 
         next.removeAt(removedIndex)
         saveItems(next)
+        upsertRemovedItem(item)
         renderItemList()
+        renderRemovedItems()
         showUndoBanner(item, removedIndex)
+    }
+
+    private fun restoreRemovedItem(item: ShuffleItem) {
+        val removedIndex = removedItems.indexOfFirst { it.uri == item.uri }
+        if (removedIndex == -1) return
+
+        removedItems.removeAt(removedIndex)
+        persistRemovedItems()
+        val currentItems = getItems().toMutableList()
+        if (currentItems.any { it.uri == item.uri }) {
+            renderItemList()
+            renderRemovedItems()
+            toast("Item is already in your list.")
+            return
+        }
+
+        currentItems.add(item)
+        saveItems(currentItems)
+        renderItemList()
+        renderRemovedItems()
+        toast("Restored ${quotedTitle(item.title)}.")
     }
 
     private fun showUndoBanner(item: ShuffleItem, removedIndex: Int) {
@@ -733,7 +781,9 @@ class MainActivity : AppCompatActivity() {
         val insertIndex = removal.index.coerceIn(0, currentItems.size)
         currentItems.add(insertIndex, removal.item)
         saveItems(currentItems)
+        removeRemovedItemByUri(removal.item.uri)
         renderItemList()
+        renderRemovedItems()
         toast("Restored ${quotedTitle(removal.item.title)}.")
     }
 
@@ -742,8 +792,59 @@ class MainActivity : AppCompatActivity() {
         undoBannerContainer.removeView(removal.bannerView)
     }
 
+    private fun upsertRemovedItem(item: ShuffleItem) {
+        removeRemovedItemByUri(item.uri)
+        removedItems.add(0, item)
+        persistRemovedItems()
+    }
+
+    private fun removeRemovedItemByUri(uri: String): Boolean {
+        val removedIndex = removedItems.indexOfFirst { it.uri == uri }
+        if (removedIndex == -1) return false
+        removedItems.removeAt(removedIndex)
+        persistRemovedItems()
+        return true
+    }
+
+    private fun removeRemovedItemsByUris(uris: Collection<String>): Boolean {
+        if (uris.isEmpty()) return false
+        val removedUriSet = uris.toSet()
+        val nextRemovedItems = removedItems.filterNot { it.uri in removedUriSet }
+        if (nextRemovedItems.size == removedItems.size) return false
+        removedItems.clear()
+        removedItems.addAll(nextRemovedItems)
+        persistRemovedItems()
+        return true
+    }
+
+    private fun clearRemovedItems() {
+        removedItems.clear()
+        persistRemovedItems()
+        renderRemovedItems()
+    }
+
+    private fun showPurgeRemovedItemsDialog() {
+        if (removedItems.isEmpty()) return
+        val itemLabel = if (removedItems.size == 1) "1 item" else "${removedItems.size} items"
+        AlertDialog.Builder(this)
+            .setMessage("Permanently remove $itemLabel?")
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Purge") { _, _ ->
+                clearRemovedItems()
+                toast("Purged Removed Items.")
+            }
+            .show()
+    }
+
     private fun renderItemList() {
         itemAdapter.submit(getItems())
+    }
+
+    private fun renderRemovedItems() {
+        removedItemsAdapter.submit(removedItems)
+        removedItemsSection.visibility = if (removedItems.isEmpty()) View.GONE else View.VISIBLE
+        removedItemsCount.text = if (removedItems.size == 1) "1 item" else "${removedItems.size} items"
+        purgeRemovedItemsButton.isEnabled = removedItems.isNotEmpty()
     }
 
     private fun renderQueue() {
@@ -822,7 +923,14 @@ class MainActivity : AppCompatActivity() {
             toast("Unable to export saved items because stored data is invalid JSON.")
             return
         }
-        val data = JSONObject().put(KEY_ITEMS, exportItems)
+        val exportRemovedItems = runCatching { getStoredRemovedItemArrayForExport() }.getOrElse {
+            storageJsonInput.setText("")
+            toast("Unable to export Removed Items because stored data is invalid JSON.")
+            return
+        }
+        val data = JSONObject()
+            .put(KEY_ITEMS, exportItems)
+            .put(KEY_REMOVED_ITEMS, exportRemovedItems)
         storageJsonInput.setText(data.toString(2))
         toast("Exported saved items to JSON.")
     }
@@ -840,28 +948,24 @@ class MainActivity : AppCompatActivity() {
 
         val importedItemsArray = parsed.optJSONArray(KEY_ITEMS)
             ?: return toast("Import JSON must include a valid shuffle-by-album.items array.")
-
-        val importedItems = buildList {
-            for (index in 0 until importedItemsArray.length()) {
-                val obj = importedItemsArray.optJSONObject(index) ?: continue
-                val type = obj.optString("type")
-                val uri = obj.opt("uri")
-                if ((type != "album" && type != "playlist") || uri !is String) continue
-                val title = obj.opt("title")
-                add(
-                    ShuffleItem(
-                        type = type,
-                        uri = uri,
-                        title = if (title is String) title else uri,
-                    ),
-                )
-            }
+        val importedRemovedItemsValue = parsed.opt(KEY_REMOVED_ITEMS)
+        if (importedRemovedItemsValue != null && importedRemovedItemsValue !is JSONArray) {
+            return toast("Import JSON must include a valid shuffle-by-album.removedItems array when provided.")
         }
+
+        val importedItems = parseShuffleItems(importedItemsArray)
+        val importedItemUris = importedItems.map { it.uri }.toSet()
+        val importedRemovedItems = parseShuffleItems(importedRemovedItemsValue as? JSONArray ?: JSONArray())
+            .filterNot { it.uri in importedItemUris }
         saveItems(importedItems)
+        saveRemovedItems(importedRemovedItems)
+        removedItems.clear()
+        removedItems.addAll(importedRemovedItems)
 
         stopSession("Data imported. Session reset.")
         refreshAuthStatus()
         renderItemList()
+        renderRemovedItems()
         toast("Imported saved items.")
     }
 
@@ -872,32 +976,72 @@ class MainActivity : AppCompatActivity() {
         return parsed
     }
 
+    private fun getStoredRemovedItemArrayForExport(): JSONArray {
+        val raw = getStringPref(KEY_REMOVED_ITEMS) ?: return JSONArray()
+        val parsed = JSONTokener(raw).nextValue()
+        if (parsed !is JSONArray) throw IllegalArgumentException("Expected stored removed items array")
+        return parsed
+    }
+
     private fun getItems(): List<ShuffleItem> {
         val raw = getStringPref(KEY_ITEMS) ?: return emptyList()
         return try {
-            val array = JSONArray(raw)
-            buildList {
-                for (index in 0 until array.length()) {
-                    val obj = array.optJSONObject(index) ?: continue
-                    val type = obj.optString("type")
-                    val uri = obj.optString("uri")
-                    val title = obj.optString("title", uri)
-                    if ((type == "album" || type == "playlist") && uri.isNotBlank()) {
-                        add(ShuffleItem(type = type, uri = uri, title = title))
-                    }
-                }
-            }
+            parseShuffleItems(JSONArray(raw))
         } catch (_: Exception) {
             emptyList()
         }
     }
 
-    private fun saveItems(items: List<ShuffleItem>) {
-        val array = JSONArray()
-        items.forEach {
-            array.put(JSONObject().put("type", it.type).put("uri", it.uri).put("title", it.title))
+    private fun getRemovedItems(): List<ShuffleItem> {
+        val raw = getStringPref(KEY_REMOVED_ITEMS) ?: return emptyList()
+        return try {
+            parseShuffleItems(JSONArray(raw))
+        } catch (_: Exception) {
+            emptyList()
         }
-        prefs.edit().putString(KEY_ITEMS, array.toString()).apply()
+    }
+
+    private fun parseShuffleItems(array: JSONArray): List<ShuffleItem> {
+        return buildList {
+            for (index in 0 until array.length()) {
+                val obj = array.optJSONObject(index) ?: continue
+                val type = obj.optString("type")
+                val uri = obj.opt("uri")
+                if ((type != "album" && type != "playlist") || uri !is String || uri.isBlank()) continue
+                val title = obj.opt("title")
+                add(
+                    ShuffleItem(
+                        type = type,
+                        uri = uri,
+                        title = if (title is String) title else uri,
+                    ),
+                )
+            }
+        }
+    }
+
+    private fun saveItems(items: List<ShuffleItem>) {
+        prefs.edit().putString(KEY_ITEMS, serializeShuffleItems(items).toString()).apply()
+    }
+
+    private fun saveRemovedItems(items: List<ShuffleItem>) {
+        if (items.isEmpty()) {
+            prefs.edit().remove(KEY_REMOVED_ITEMS).apply()
+            return
+        }
+        prefs.edit().putString(KEY_REMOVED_ITEMS, serializeShuffleItems(items).toString()).apply()
+    }
+
+    private fun persistRemovedItems() {
+        saveRemovedItems(removedItems)
+    }
+
+    private fun serializeShuffleItems(items: List<ShuffleItem>): JSONArray {
+        return JSONArray().apply {
+            items.forEach {
+                put(JSONObject().put("type", it.type).put("uri", it.uri).put("title", it.title))
+            }
+        }
     }
 
     private fun getToken(): String? {
@@ -1378,6 +1522,7 @@ class MainActivity : AppCompatActivity() {
         private const val KEY_TOKEN_EXPIRY = "shuffle-by-album.tokenExpiry"
         private const val KEY_TOKEN_SCOPE = "shuffle-by-album.tokenScope"
         private const val KEY_ITEMS = "shuffle-by-album.items"
+        private const val KEY_REMOVED_ITEMS = "shuffle-by-album.removedItems"
         private const val KEY_RUNTIME = "shuffle-by-album.runtime"
         private const val PLAYBACK_MONITOR_INTERVAL_MS = 4_000L
         private const val UNDO_BANNER_DURATION_MS = 5_000L
@@ -1590,9 +1735,10 @@ data class SessionState(
     val observedCurrentContext: Boolean = false,
 )
 
-private class ItemAdapter(
-    private val onRemove: (ShuffleItem) -> Unit,
-) : RecyclerView.Adapter<ItemAdapter.ItemViewHolder>() {
+private class ItemActionAdapter(
+    private val actionLabel: String,
+    private val onAction: (ShuffleItem) -> Unit,
+) : RecyclerView.Adapter<ItemActionAdapter.ItemViewHolder>() {
     private val items = mutableListOf<ShuffleItem>()
 
     fun submit(next: List<ShuffleItem>) {
@@ -1603,7 +1749,7 @@ private class ItemAdapter(
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ItemViewHolder {
         val view = LayoutInflater.from(parent.context).inflate(R.layout.item_row, parent, false)
-        return ItemViewHolder(view, onRemove)
+        return ItemViewHolder(view, actionLabel, onAction)
     }
 
     override fun getItemCount(): Int = items.size
@@ -1614,14 +1760,16 @@ private class ItemAdapter(
 
     class ItemViewHolder(
         itemView: View,
-        private val onRemove: (ShuffleItem) -> Unit,
+        private val actionLabel: String,
+        private val onAction: (ShuffleItem) -> Unit,
     ) : RecyclerView.ViewHolder(itemView) {
         private val title: TextView = itemView.findViewById(R.id.title)
-        private val removeButton: Button = itemView.findViewById(R.id.removeButton)
+        private val actionButton: Button = itemView.findViewById(R.id.removeButton)
 
         fun bind(item: ShuffleItem) {
             title.text = item.title.ifBlank { item.uri }
-            removeButton.setOnClickListener { onRemove(item) }
+            actionButton.text = actionLabel
+            actionButton.setOnClickListener { onAction(item) }
         }
     }
 }
