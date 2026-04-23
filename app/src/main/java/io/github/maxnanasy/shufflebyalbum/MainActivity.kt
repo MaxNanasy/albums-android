@@ -827,7 +827,7 @@ class MainActivity : AppCompatActivity() {
         if (removedItems.isEmpty()) return
         val itemLabel = if (removedItems.size == 1) "1 item" else "${removedItems.size} items"
         AlertDialog.Builder(this)
-            .setMessage("Permanently remove $itemLabel from Removed Items?")
+            .setMessage("Permanently remove $itemLabel?")
             .setNegativeButton("Cancel", null)
             .setPositiveButton("Purge") { _, _ ->
                 clearRemovedItems()
