@@ -8,7 +8,5 @@
     <dimen name="item_list_height">220dp</dimen>
     <dimen name="storage_json_editor_height">180dp</dimen>
     <dimen name="item_row_padding">8dp</dimen>
-    <dimen name="undo_banner_bottom_spacing">8dp</dimen>
-    <dimen name="undo_banner_content_padding">12dp</dimen>
     <dimen name="helper_text_size">12sp</dimen>
 </resources>
