@@ -166,7 +166,7 @@ class MainActivity : AppCompatActivity() {
         disconnectButton.setOnClickListener {
             clearAuth()
             refreshAuthStatus()
-            snackbar("Disconnected from Spotify.")
+            snackbar("Disconnected from Spotify")
         }
         addButton.setOnClickListener { launchUiAction("Add item") { addItem() } }
         itemUriInput.setOnEditorActionListener { _, actionId, _ ->
@@ -183,7 +183,7 @@ class MainActivity : AppCompatActivity() {
         startButton.setOnClickListener { launchUiAction("Start playback") { startShuffleSession() } }
         reattachButton.setOnClickListener { launchUiAction("Reattach session") { reattachSession() } }
         skipButton.setOnClickListener { launchUiAction("Next item") { goToNextItem() } }
-        stopButton.setOnClickListener { stopSession("Session stopped.") }
+        stopButton.setOnClickListener { stopSession("Session stopped") }
         exportStorageButton.setOnClickListener { exportStorageJson() }
         importStorageButton.setOnClickListener { importStorageJson() }
         purgeRemovedItemsButton.setOnClickListener { showPurgeRemovedItemsDialog() }
@@ -192,16 +192,16 @@ class MainActivity : AppCompatActivity() {
     private fun refreshAuthStatus() {
         val token = getToken()
         if (token == null) {
-            authStatus.text = "Not connected."
+            authStatus.text = "Not connected"
             return
         }
         val grantedScopes = getGrantedScopes()
         val hasPlaylistScopes = grantedScopes.contains("playlist-read-private") &&
             grantedScopes.contains("playlist-read-collaborative")
         authStatus.text = if (hasPlaylistScopes) {
-            "Connected."
+            "Connected"
         } else {
-            "Connected, but token is missing playlist import scopes. Disconnect and reconnect."
+            "Connected, but token is missing playlist import scopes; disconnect and reconnect"
         }
     }
 
@@ -253,7 +253,7 @@ class MainActivity : AppCompatActivity() {
         try {
             startActivity(Intent(Intent.ACTION_VIEW, authUri))
         } catch (_: ActivityNotFoundException) {
-            snackbar("Unable to open browser for Spotify login.")
+            snackbar("Unable to open browser for Spotify login")
         }
     }
 
@@ -366,7 +366,7 @@ class MainActivity : AppCompatActivity() {
         val error = uri.getQueryParameter("error")
         if (error != null) {
             authStatus.text = if (error == "access_denied") {
-                "Spotify authorization denied."
+                "Spotify authorization denied"
             } else {
                 "Spotify authorization error: $error"
             }
@@ -375,14 +375,14 @@ class MainActivity : AppCompatActivity() {
         }
         val code = uri.getQueryParameter("code")
         if (code.isNullOrBlank()) {
-            authStatus.text = "Spotify authorization failed: missing authorization code."
-            reportError(snackbarMessage = "Spotify login did not return an authorization code.")
+            authStatus.text = "Spotify authorization failed: missing authorization code"
+            reportError(snackbarMessage = "Spotify login did not return an authorization code")
             prefs.edit().remove(KEY_VERIFIER).apply()
             return true
         }
         val verifier = getStringPref(KEY_VERIFIER)
         if (verifier.isNullOrBlank()) {
-            authStatus.text = "Missing PKCE verifier. Try connecting again."
+            authStatus.text = "Missing PKCE verifier; try connecting again"
             return true
         }
 
@@ -399,38 +399,38 @@ class MainActivity : AppCompatActivity() {
 
     private suspend fun addItem() {
         val parsed = parseSpotifyUri(itemUriInput.text.toString().trim())
-            ?: return snackbar("Enter a valid Spotify album/playlist URI or URL.")
+            ?: return snackbar("Enter a valid Spotify album/playlist URI or URL")
 
         val items = getItems().toMutableList()
         if (items.any { it.uri == parsed.uri }) {
             removeRemovedItemByUri(parsed.uri)
             renderRemovedItems()
-            return snackbar("Item is already in your list.")
+            return snackbar("Item is already in your list")
         }
 
-        val token = getUsableAccessToken() ?: return snackbar("Connect Spotify first so the app can load item titles.")
+        val token = getUsableAccessToken() ?: return snackbar("Connect Spotify first so the app can load item titles")
         val titled = withItemTitle(parsed, token)
-            ?: return snackbar("Unable to load title for that item. Please try another URI.")
+            ?: return snackbar("Unable to load title for that item; please try another URI")
         items.add(titled)
         saveItems(items)
         removeRemovedItemByUri(titled.uri)
         renderItemList()
         renderRemovedItems()
         itemUriInput.setText("")
-        snackbar("Added ${quotedTitle(titled.title)}.")
+        snackbar("Added ${quotedTitle(titled.title)}")
     }
 
     private suspend fun importAlbumsFromPlaylist() {
-        val token = getUsableAccessToken() ?: return snackbar("Connect Spotify first so the app can import albums.")
+        val token = getUsableAccessToken() ?: return snackbar("Connect Spotify first so the app can import albums")
         val playlist = parseSpotifyPlaylistRef(itemUriInput.text.toString().trim())
-            ?: return snackbar("Enter a valid Spotify playlist URL, URI, or playlist ID.")
-        snackbar("Importing albums from playlist...")
+            ?: return snackbar("Enter a valid Spotify playlist URL, URI, or playlist ID")
+        snackbar("Importing albums from playlist")
 
         val existing = getItems().toMutableList()
         val existingUris = existing.map { it.uri }.toMutableSet()
         val playlistResult = fetchPlaylistAlbums(playlist.id, token)
         if (!playlistResult.fullyLoaded) {
-            return snackbar(playlistResult.failureMessage ?: "Failed to import albums from playlist.")
+            return snackbar(playlistResult.failureMessage ?: "Failed to import albums from playlist")
         }
         val albums = playlistResult.items
 
@@ -445,13 +445,13 @@ class MainActivity : AppCompatActivity() {
         removeRemovedItemsByUris(albums.map { it.uri })
         renderItemList()
         renderRemovedItems()
-        snackbar("Imported $added album(s) from playlist (${albums.size} unique album(s) found).")
+        snackbar("Imported $added album(s) from playlist (${albums.size} unique album(s) found)")
     }
 
     private suspend fun startShuffleSession() {
-        getUsableAccessToken() ?: return snackbar("Connect Spotify first.")
+        getUsableAccessToken() ?: return snackbar("Connect Spotify first")
         val items = getItems()
-        if (items.isEmpty()) return snackbar("Add at least one album or playlist first.")
+        if (items.isEmpty()) return snackbar("Add at least one album or playlist first")
 
         session = session.copy(
             activationState = ActivationState.ACTIVE,
@@ -461,7 +461,7 @@ class MainActivity : AppCompatActivity() {
         persistRuntimeState()
         renderQueue()
         renderPlaybackControls()
-        playbackStatus.text = "Session started with ${session.queue.size} item(s)."
+        playbackStatus.text = "Session started with ${session.queue.size} item(s)"
         when (playCurrentItem()) {
             PlaybackStartResult.STARTED -> transitionActive(startMonitoring = true)
             PlaybackStartResult.DETACHED,
@@ -474,27 +474,27 @@ class MainActivity : AppCompatActivity() {
         if (session.activationState != ActivationState.DETACHED) return
         val token = getUsableAccessToken()
         if (token == null) {
-            playbackStatus.text = "Spotify session expired. Please reconnect."
-            snackbar("Spotify session expired. Please reconnect.")
+            playbackStatus.text = "Spotify session expired; please reconnect"
+            snackbar("Spotify session expired; please reconnect")
             return
         }
         if (session.queue.isEmpty()) {
-            stopSession("No queued item available to reattach.")
-            snackbar("No queued item available to reattach.")
+            stopSession("No queued item available to reattach")
+            snackbar("No queued item available to reattach")
             return
         }
 
         val snapshotResult = fetchCurrentPlaybackSnapshot(token)
         if (!snapshotResult.ok) {
             val failure = spotifyFailureMessage(snapshotResult.status, snapshotResult.failureReason)
-            transitionDetached("Failed to reattach: $failure.")
-            reportError(snackbarMessage = "Failed to reattach.")
+            transitionDetached("Failed to reattach: $failure")
+            reportError(snackbarMessage = "Failed to reattach")
             return
         }
 
         val current = session.queue.getOrNull(session.index) ?: run {
-            stopSession("No queued item available to reattach.")
-            snackbar("No queued item available to reattach.")
+            stopSession("No queued item available to reattach")
+            snackbar("No queued item available to reattach")
             return
         }
         val expectedUri = session.currentUri ?: current.uri
@@ -510,12 +510,12 @@ class MainActivity : AppCompatActivity() {
             renderPlaybackControls()
             playbackStatus.text = formatNowPlayingStatus(current)
             startMonitorLoop()
-            snackbar("Session reattached.")
+            snackbar("Session reattached")
         } else {
             when (playCurrentItem()) {
                 PlaybackStartResult.STARTED -> {
                     transitionActive(startMonitoring = true)
-                    snackbar("Session reattached.")
+                    snackbar("Session reattached")
                 }
                 PlaybackStartResult.DETACHED,
                 PlaybackStartResult.STOPPED,
@@ -526,24 +526,24 @@ class MainActivity : AppCompatActivity() {
 
     private suspend fun goToNextItem() {
         if (session.activationState != ActivationState.ACTIVE) {
-            playbackStatus.text = "No active session."
+            playbackStatus.text = "No active session"
             return
         }
         session = session.copy(index = session.index + 1)
         if (session.index >= session.queue.size) {
-            stopSession("Finished: all selected albums/playlists were played.")
+            stopSession("Finished: all selected albums/playlists were played")
             return
         }
         persistRuntimeState()
         renderQueue()
-        getUsableAccessToken() ?: return stopSession("Spotify session expired. Reconnect to continue.")
+        getUsableAccessToken() ?: return stopSession("Spotify session expired; reconnect to continue")
         playCurrentItem()
     }
 
     private suspend fun playCurrentItem(): PlaybackStartResult {
         val current = session.queue.getOrNull(session.index)
             ?: run {
-                stopSession("Finished: all selected albums/playlists were played.")
+                stopSession("Finished: all selected albums/playlists were played")
                 return PlaybackStartResult.STOPPED
             }
 
@@ -571,8 +571,8 @@ class MainActivity : AppCompatActivity() {
             playUriWithAppRemote(current.uri)
         } catch (error: Throwable) {
             val failure = describeAppRemoteError(error)
-            transitionDetached("Playback detached due to a Spotify error: $failure.")
-            reportError(snackbarMessage = "Playback detached due to a Spotify error: $failure.")
+            transitionDetached("Playback detached due to a Spotify error: $failure")
+            reportError(snackbarMessage = "Playback detached due to a Spotify error: $failure")
             return PlaybackStartResult.DETACHED
         }
 
@@ -588,7 +588,7 @@ class MainActivity : AppCompatActivity() {
             return PlaybackPreflightResult(
                 ok = false,
                 detach = true,
-                message = "Playback detached due to a Spotify error: Playback preflight failed: could not disable shuffle ($failure).",
+                message = "Playback detached due to a Spotify error: Playback preflight failed: could not disable shuffle ($failure)",
             )
         }
 
@@ -601,7 +601,7 @@ class MainActivity : AppCompatActivity() {
             return PlaybackPreflightResult(
                 ok = false,
                 detach = true,
-                message = "Playback detached due to a Spotify error: Playback preflight failed: could not disable repeat ($failure).",
+                message = "Playback detached due to a Spotify error: Playback preflight failed: could not disable repeat ($failure)",
             )
         }
 
@@ -610,32 +610,32 @@ class MainActivity : AppCompatActivity() {
 
     private suspend fun monitorPlayback() {
         if (session.activationState != ActivationState.ACTIVE || session.currentUri == null) return
-        val token = getUsableAccessToken() ?: return transitionDetached("Spotify session expired. Please reconnect.")
+        val token = getUsableAccessToken() ?: return transitionDetached("Spotify session expired; please reconnect")
 
         val snapshotResult = fetchCurrentPlaybackSnapshot(token)
         if (snapshotResult.status == 204) return
         if (!snapshotResult.ok) {
             val failure = spotifyFailureMessage(snapshotResult.status, snapshotResult.failureReason)
             if (isUnrecoverableMonitorStatus(snapshotResult.status)) {
-                transitionDetached("Playback monitoring paused: $failure.")
+                transitionDetached("Playback monitoring paused: $failure")
                 reportError(
-                    snackbarMessage = "Playback monitoring paused: $failure.",
+                    snackbarMessage = "Playback monitoring paused: $failure",
                     cooldownKey = "monitor-failure-detached",
                 )
             } else {
                 playbackStatus.text = "Playback monitor encountered an error: $failure"
                 reportError(
-                    snackbarMessage = "Playback monitor encountered an error.",
+                    snackbarMessage = "Playback monitor encountered an error",
                     cooldownKey = "monitor-failure-recoverable",
                 )
             }
             return
         }
         val snapshot = snapshotResult.snapshot ?: run {
-            val failure = "Missing playback snapshot."
+            val failure = "Missing playback snapshot"
             playbackStatus.text = "Playback monitor encountered an error: $failure"
             reportError(
-                snackbarMessage = "Playback monitor encountered an error.",
+                snackbarMessage = "Playback monitor encountered an error",
                 cooldownKey = "monitor-failure-recoverable",
             )
             return
@@ -659,7 +659,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         if (contextUri != session.currentUri) {
-            transitionDetached("Spotify is playing a different album/playlist than this app expects. Reattach to resume.")
+            transitionDetached("Spotify is playing a different album/playlist than this app expects; reattach to resume")
         }
     }
 
@@ -729,7 +729,7 @@ class MainActivity : AppCompatActivity() {
         if (currentItems.any { it.uri == item.uri }) {
             renderItemList()
             renderRemovedItems()
-            snackbar("Item is already in your list.")
+            snackbar("Item is already in your list")
             return
         }
 
@@ -737,14 +737,14 @@ class MainActivity : AppCompatActivity() {
         saveItems(currentItems)
         renderItemList()
         renderRemovedItems()
-        snackbar("Restored ${quotedTitle(item.title)}.")
+        snackbar("Restored ${quotedTitle(item.title)}")
     }
 
     private fun showUndoSnackbar(item: ShuffleItem, removedIndex: Int) {
         undoSnackbar?.dismiss()
         val snackbar = Snackbar.make(
             findViewById(android.R.id.content),
-            "Removed ${quotedTitle(item.title)}.",
+            "Removed ${quotedTitle(item.title)}",
             Snackbar.LENGTH_LONG,
         )
         snackbar.setAction("Undo") {
@@ -767,7 +767,7 @@ class MainActivity : AppCompatActivity() {
         val currentItems = getItems().toMutableList()
         if (currentItems.any { it.uri == item.uri }) {
             renderItemList()
-            snackbar("Item is already in your list.")
+            snackbar("Item is already in your list")
             return
         }
 
@@ -777,7 +777,7 @@ class MainActivity : AppCompatActivity() {
         removeRemovedItemByUri(item.uri)
         renderItemList()
         renderRemovedItems()
-        snackbar("Restored ${quotedTitle(item.title)}.")
+        snackbar("Restored ${quotedTitle(item.title)}")
     }
 
     private fun upsertRemovedItem(item: ShuffleItem) {
@@ -819,7 +819,7 @@ class MainActivity : AppCompatActivity() {
             .setNegativeButton("Cancel", null)
             .setPositiveButton("Purge") { _, _ ->
                 clearRemovedItems()
-                snackbar("Purged Removed Items.")
+                snackbar("Purged Removed Items")
             }
             .show()
     }
@@ -861,7 +861,7 @@ class MainActivity : AppCompatActivity() {
             clearRuntimeState()
             renderQueue()
             renderPlaybackControls()
-            playbackStatus.text = "No active session."
+            playbackStatus.text = "No active session"
             return
         }
 
@@ -908,37 +908,37 @@ class MainActivity : AppCompatActivity() {
     private fun exportStorageJson() {
         val exportItems = runCatching { getStoredItemArrayForExport() }.getOrElse {
             storageJsonInput.setText("")
-            snackbar("Unable to export saved items because stored data is invalid JSON.")
+            snackbar("Unable to export saved items because stored data is invalid JSON")
             return
         }
         val exportRemovedItems = runCatching { getStoredRemovedItemArrayForExport() }.getOrElse {
             storageJsonInput.setText("")
-            snackbar("Unable to export Removed Items because stored data is invalid JSON.")
+            snackbar("Unable to export Removed Items because stored data is invalid JSON")
             return
         }
         val data = JSONObject()
             .put(KEY_ITEMS, exportItems)
             .put(KEY_REMOVED_ITEMS, exportRemovedItems)
         storageJsonInput.setText(data.toString(2))
-        snackbar("Exported saved items to JSON.")
+        snackbar("Exported saved items to JSON")
     }
 
     private fun importStorageJson() {
         val raw = storageJsonInput.text.toString().trim()
-        if (raw.isEmpty()) return snackbar("Paste a JSON object to import.")
+        if (raw.isEmpty()) return snackbar("Paste a JSON object to import")
 
         val parsed = try {
             JSONTokener(raw).nextValue()
         } catch (_: Exception) {
-            return snackbar("Invalid JSON. Please provide a valid JSON object.")
+            return snackbar("Invalid JSON; please provide a valid JSON object")
         }
-        if (parsed !is JSONObject) return snackbar("Import JSON must be an object of key/value pairs.")
+        if (parsed !is JSONObject) return snackbar("Import JSON must be an object of key/value pairs")
 
         val importedItemsArray = parsed.optJSONArray(KEY_ITEMS)
-            ?: return snackbar("Import JSON must include a valid shuffle-by-album.items array.")
+            ?: return snackbar("Import JSON must include a valid shuffle-by-album.items array")
         val importedRemovedItemsValue = parsed.opt(KEY_REMOVED_ITEMS)
         if (importedRemovedItemsValue != null && importedRemovedItemsValue !is JSONArray) {
-            return snackbar("Import JSON must include a valid shuffle-by-album.removedItems array when provided.")
+            return snackbar("Import JSON must include a valid shuffle-by-album.removedItems array when provided")
         }
 
         val importedItems = parseShuffleItems(importedItemsArray)
@@ -950,11 +950,11 @@ class MainActivity : AppCompatActivity() {
         removedItems.clear()
         removedItems.addAll(importedRemovedItems)
 
-        stopSession("Data imported. Session reset.")
+        stopSession("Data imported; session reset")
         refreshAuthStatus()
         renderItemList()
         renderRemovedItems()
-        snackbar("Imported saved items.")
+        snackbar("Imported saved items")
     }
 
     private fun getStoredItemArrayForExport(): JSONArray {
@@ -1076,14 +1076,14 @@ class MainActivity : AppCompatActivity() {
         if (!response.ok || response.body == null) {
             reportError(
                 statusView = authStatus,
-                statusMessage = "Spotify token exchange failed: ${spotifyFailureMessage(response.status, response.failureReason)}.",
+                statusMessage = "Spotify token exchange failed: ${spotifyFailureMessage(response.status, response.failureReason)}",
             )
             return null
         }
         return parseTokenResponse(response.body) ?: run {
             reportError(
                 statusView = authStatus,
-                statusMessage = "Spotify token exchange failed: invalid token response.",
+                statusMessage = "Spotify token exchange failed: invalid token response",
             )
             null
         }
@@ -1099,9 +1099,9 @@ class MainActivity : AppCompatActivity() {
         val response = formPost(spotifyAccountsUrl("/api/token"), params)
         if (!response.ok || response.body == null) {
             val refreshStatusMessage = if (response.failureReason != null) {
-                "Network issue refreshing Spotify session. Please reconnect if this continues."
+                "Network issue refreshing Spotify session; please reconnect if this continues"
             } else {
-                "Unable to restore Spotify session. Please reconnect."
+                "Unable to restore Spotify session; please reconnect"
             }
             reportError(
                 statusView = authStatus,
@@ -1112,7 +1112,7 @@ class MainActivity : AppCompatActivity() {
         val token = parseTokenResponse(response.body) ?: run {
             reportError(
                 statusView = authStatus,
-                statusMessage = "Unable to restore Spotify session. Please reconnect.",
+                statusMessage = "Unable to restore Spotify session; please reconnect",
             )
             return null
         }
@@ -1216,14 +1216,14 @@ class MainActivity : AppCompatActivity() {
     private fun handleExpiredApiSession() {
         clearAuth()
         refreshAuthStatus()
-        val message = "Spotify session expired. Please reconnect."
+        val message = "Spotify session expired; please reconnect"
         if (session.activationState == ActivationState.ACTIVE || session.activationState == ActivationState.DETACHED) {
             transitionDetached(message)
         } else {
             playbackStatus.text = message
         }
         reportError(
-            snackbarMessage = "Spotify session expired. Please reconnect.",
+            snackbarMessage = "Spotify session expired; please reconnect",
             cooldownKey = "auth-expired",
         )
     }
@@ -1446,13 +1446,13 @@ class MainActivity : AppCompatActivity() {
 
     private fun spotifyStatusMessage(status: Int): String {
         return when (status) {
-            400 -> "Network error while contacting Spotify. Please try again."
-            401 -> "Spotify session expired. Please reconnect."
-            403 -> "Spotify permissions are missing. Disconnect and reconnect."
-            404 -> "Requested Spotify item or playback device was not found."
-            429 -> "Spotify rate limit reached. Please wait a moment and retry."
-            in 500..599 -> "Spotify is temporarily unavailable. Please try again shortly."
-            else -> "Network error while contacting Spotify. Please try again."
+            400 -> "Network error while contacting Spotify; please try again"
+            401 -> "Spotify session expired; please reconnect"
+            403 -> "Spotify permissions are missing; disconnect and reconnect"
+            404 -> "Requested Spotify item or playback device was not found"
+            429 -> "Spotify rate limit reached; please wait a moment and retry"
+            in 500..599 -> "Spotify is temporarily unavailable; please try again shortly"
+            else -> "Network error while contacting Spotify; please try again"
         }
     }
 
@@ -1653,7 +1653,7 @@ private fun HttpResult.describePlaylistImportFailure(): String {
     }
     val details = extractErrorDetail(body)
     val error = if (details.isNullOrBlank()) "status $status" else details
-    return "Error importing albums: $error."
+    return "Error importing albums: $error"
 }
 
 private fun PlaybackSnapshotResult.describeFailure(): String {
@@ -1680,8 +1680,8 @@ private fun extractErrorDetail(body: String?): String? {
 
 private fun normalizeSpotifyNetworkError(reason: String): String {
     return when (reason.lowercase()) {
-        "network unavailable", "network error" -> "Network error while contacting Spotify. Please try again."
-        else -> "Network error while contacting Spotify. Please try again."
+        "network unavailable", "network error" -> "Network error while contacting Spotify; please try again"
+        else -> "Network error while contacting Spotify; please try again"
     }
 }
 
