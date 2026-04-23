@@ -349,7 +349,6 @@ class MainActivity : AppCompatActivity() {
 
     private suspend fun processSharedSpotifyItem(intent: Intent?) {
         val sharedItem = extractSharedSpotifyItem(intent) ?: return
-        itemUriInput.setText(sharedItem.uri)
         addItem(sharedItem)
         setIntent(Intent())
     }
