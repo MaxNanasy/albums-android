@@ -1,6 +1,7 @@
 package io.github.maxnanasy.shufflebyalbum
 
 import android.content.Context
+import android.content.Intent
 import android.os.SystemClock
 import android.widget.TextView
 import androidx.annotation.IdRes
@@ -43,6 +44,12 @@ abstract class AbstractUiTestCase {
 
     protected fun launchMainActivity(): ActivityScenario<MainActivity> {
         return ActivityScenario.launch(MainActivity::class.java).also { launchedScenario ->
+            scenario = launchedScenario
+        }
+    }
+
+    protected fun launchMainActivity(intent: Intent): ActivityScenario<MainActivity> {
+        return ActivityScenario.launch<MainActivity>(intent).also { launchedScenario ->
             scenario = launchedScenario
         }
     }

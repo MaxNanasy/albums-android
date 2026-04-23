@@ -96,7 +96,7 @@ class MainActivity : AppCompatActivity() {
         restoreRuntimeState()
 
         appScope.launch {
-            ensureUsableStartupAuth(intent?.data)
+            handleIncomingIntent(intent)
             renderItemList()
             renderRemovedItems()
             renderQueue()
@@ -108,8 +108,9 @@ class MainActivity : AppCompatActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        setIntent(intent)
         appScope.launch {
-            processAuthRedirect(intent.data)
+            handleIncomingIntent(intent)
         }
     }
 
@@ -339,26 +340,41 @@ class MainActivity : AppCompatActivity() {
         connectingAppRemote = false
     }
 
-    private suspend fun ensureUsableStartupAuth(uri: Uri?) {
-        if (processAuthRedirect(uri)) {
+    private suspend fun handleIncomingIntent(intent: Intent?) {
+        if (ensureUsableStartupAuth(intent?.data)) {
             return
+        }
+        processSharedSpotifyItem(intent)
+    }
+
+    private suspend fun processSharedSpotifyItem(intent: Intent?) {
+        val sharedItem = extractSharedSpotifyItem(intent) ?: return
+        itemUriInput.setText(sharedItem.uri)
+        addItem(sharedItem)
+        setIntent(Intent())
+    }
+
+    private suspend fun ensureUsableStartupAuth(uri: Uri?): Boolean {
+        if (processAuthRedirect(uri)) {
+            return true
         }
 
         if (getToken() != null) {
             refreshAuthStatus()
-            return
+            return false
         }
 
         if (getStringPref(KEY_REFRESH_TOKEN).isNullOrBlank()) {
             refreshAuthStatus()
-            return
+            return false
         }
 
         val token = refreshSpotifyAccessToken()
         if (token == null) {
-            return
+            return false
         }
         refreshAuthStatus()
+        return false
     }
 
     private suspend fun processAuthRedirect(uri: Uri?): Boolean {
@@ -400,7 +416,10 @@ class MainActivity : AppCompatActivity() {
     private suspend fun addItem() {
         val parsed = parseSpotifyUri(itemUriInput.text.toString().trim())
             ?: return snackbar("Enter a valid Spotify album/playlist URI or URL")
+        addItem(parsed)
+    }
 
+    private suspend fun addItem(parsed: ShuffleItem) {
         val items = getItems().toMutableList()
         if (items.any { it.uri == parsed.uri }) {
             removeRemovedItemByUri(parsed.uri)
@@ -1327,6 +1346,13 @@ class MainActivity : AppCompatActivity() {
             return ShuffleItem(type = type, uri = "spotify:$type:$id", title = "")
         }
         return null
+    }
+
+    private fun extractSharedSpotifyItem(intent: Intent?): ShuffleItem? {
+        if (intent?.action != Intent.ACTION_SEND) return null
+        val sharedText = intent.getStringExtra(Intent.EXTRA_TEXT)?.trim().orEmpty()
+        if (sharedText.isBlank()) return null
+        return parseSpotifyUri(sharedText)
     }
 
     private fun parseSpotifyPlaylistRef(raw: String): PlaylistRef? {
