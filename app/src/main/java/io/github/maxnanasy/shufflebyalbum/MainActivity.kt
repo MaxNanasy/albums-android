@@ -14,12 +14,12 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
-import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.google.android.material.snackbar.Snackbar
 import com.spotify.android.appremote.api.AppRemote
 import com.spotify.android.appremote.api.ConnectionParams
 import com.spotify.android.appremote.api.Connector
@@ -55,7 +55,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var playbackStatus: TextView
     private lateinit var itemUriInput: EditText
     private lateinit var storageJsonInput: EditText
-    private lateinit var undoBannerContainer: LinearLayout
     private lateinit var removedItemsSection: LinearLayout
     private lateinit var removedItemsCount: TextView
     private lateinit var purgeRemovedItemsButton: Button
@@ -75,16 +74,14 @@ class MainActivity : AppCompatActivity() {
     private val itemAdapter = ItemActionAdapter(actionLabel = "Remove", onAction = ::removeItem)
     private val removedItemsAdapter = ItemActionAdapter(actionLabel = "Restore", onAction = ::restoreRemovedItem)
     private val queueAdapter = QueueAdapter()
-    private val pendingRemovals = mutableMapOf<Long, PendingRemoval>()
     private val removedItems = mutableListOf<ShuffleItem>()
     private val errorToastCooldowns = mutableMapOf<String, Long>()
-    private var nextPendingRemovalId: Long = 0
 
     private var session = SessionState()
     private var spotifyAppRemote: AppRemote? = null
     private var connectingAppRemote = false
 
-    private val uiHandler = Handler(Looper.getMainLooper())
+    private var undoSnackbar: Snackbar? = null
     private val playbackMonitorLoop by lazy { playbackMonitorLoopFactory() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -132,7 +129,6 @@ class MainActivity : AppCompatActivity() {
         playbackStatus = findViewById(R.id.playbackStatus)
         itemUriInput = findViewById(R.id.itemUriInput)
         storageJsonInput = findViewById(R.id.storageJsonInput)
-        undoBannerContainer = findViewById(R.id.undoBannerContainer)
         removedItemsSection = findViewById(R.id.removedItemsSection)
         removedItemsCount = findViewById(R.id.removedItemsCount)
         purgeRemovedItemsButton = findViewById(R.id.purgeRemovedItemsButton)
@@ -720,7 +716,7 @@ class MainActivity : AppCompatActivity() {
         upsertRemovedItem(item)
         renderItemList()
         renderRemovedItems()
-        showUndoBanner(item, removedIndex)
+        showUndoSnackbar(item, removedIndex)
     }
 
     private fun restoreRemovedItem(item: ShuffleItem) {
@@ -744,52 +740,44 @@ class MainActivity : AppCompatActivity() {
         toast("Restored ${quotedTitle(item.title)}.")
     }
 
-    private fun showUndoBanner(item: ShuffleItem, removedIndex: Int) {
-        val bannerView = layoutInflater.inflate(R.layout.undo_banner_row, undoBannerContainer, false)
-        val messageView = bannerView.findViewById<TextView>(R.id.undoMessage)
-        val undoButton = bannerView.findViewById<Button>(R.id.undoButton)
-        val removalId = nextPendingRemovalId++
-        messageView.text = "Removed ${quotedTitle(item.title)}."
-
-        val dismissRunnable = Runnable {
-            clearPendingRemoval(removalId)
-        }
-        val removal = PendingRemoval(
-            id = removalId,
-            item = item,
-            index = removedIndex,
-            bannerView = bannerView,
-            dismissRunnable = dismissRunnable,
+    private fun showUndoSnackbar(item: ShuffleItem, removedIndex: Int) {
+        undoSnackbar?.dismiss()
+        val snackbar = Snackbar.make(
+            findViewById(android.R.id.content),
+            "Removed ${quotedTitle(item.title)}.",
+            Snackbar.LENGTH_LONG,
         )
-        pendingRemovals[removalId] = removal
-        undoBannerContainer.addView(bannerView, 0)
-        undoButton.setOnClickListener { undoPendingRemoval(removalId) }
-        uiHandler.postDelayed(dismissRunnable, UNDO_BANNER_DURATION_MS)
+        snackbar.setAction("Undo") {
+            restoreRemovedItemAtIndex(item, removedIndex)
+        }
+        snackbar.addCallback(
+            object : Snackbar.Callback() {
+                override fun onDismissed(transientBottomBar: Snackbar?, event: Int) {
+                    if (undoSnackbar === transientBottomBar) {
+                        undoSnackbar = null
+                    }
+                }
+            },
+        )
+        undoSnackbar = snackbar
+        snackbar.show()
     }
 
-    private fun undoPendingRemoval(removalId: Long) {
-        val removal = pendingRemovals.remove(removalId) ?: return
-        uiHandler.removeCallbacks(removal.dismissRunnable)
-        undoBannerContainer.removeView(removal.bannerView)
+    private fun restoreRemovedItemAtIndex(item: ShuffleItem, insertAt: Int) {
         val currentItems = getItems().toMutableList()
-        if (currentItems.any { it.uri == removal.item.uri }) {
+        if (currentItems.any { it.uri == item.uri }) {
             renderItemList()
             toast("Item is already in your list.")
             return
         }
 
-        val insertIndex = removal.index.coerceIn(0, currentItems.size)
-        currentItems.add(insertIndex, removal.item)
+        val insertIndex = insertAt.coerceIn(0, currentItems.size)
+        currentItems.add(insertIndex, item)
         saveItems(currentItems)
-        removeRemovedItemByUri(removal.item.uri)
+        removeRemovedItemByUri(item.uri)
         renderItemList()
         renderRemovedItems()
-        toast("Restored ${quotedTitle(removal.item.title)}.")
-    }
-
-    private fun clearPendingRemoval(removalId: Long) {
-        val removal = pendingRemovals.remove(removalId) ?: return
-        undoBannerContainer.removeView(removal.bannerView)
+        toast("Restored ${quotedTitle(item.title)}.")
     }
 
     private fun upsertRemovedItem(item: ShuffleItem) {
@@ -1525,7 +1513,6 @@ class MainActivity : AppCompatActivity() {
         private const val KEY_REMOVED_ITEMS = "shuffle-by-album.removedItems"
         private const val KEY_RUNTIME = "shuffle-by-album.runtime"
         private const val PLAYBACK_MONITOR_INTERVAL_MS = 4_000L
-        private const val UNDO_BANNER_DURATION_MS = 5_000L
         private const val ERROR_TOAST_COOLDOWN_MS = 45_000L
     }
 }
@@ -1627,16 +1614,6 @@ data class ShuffleItem(
     val uri: String,
     val title: String,
 )
-
-data class PendingRemoval(
-    val id: Long,
-    val item: ShuffleItem,
-    val index: Int,
-    val bannerView: View,
-    val dismissRunnable: Runnable,
-)
-
-
 
 private data class PlaylistAlbumImportResult(
     val items: List<ShuffleItem>,
