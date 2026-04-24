@@ -348,7 +348,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     private suspend fun processSharedSpotifyItem(intent: Intent?) {
-        val sharedItem = extractSharedSpotifyItem(intent) ?: return
+        val sharedText = extractSharedSpotifyText(intent) ?: return
+        val sharedItem = parseSpotifyUri(sharedText)
+        if (sharedItem == null) {
+            snackbar("Spotify album or playlist required for this Share action")
+            setIntent(Intent())
+            return
+        }
         addItem(sharedItem, clearInput = false)
         setIntent(Intent())
     }
@@ -1349,11 +1355,9 @@ class MainActivity : AppCompatActivity() {
         return null
     }
 
-    private fun extractSharedSpotifyItem(intent: Intent?): ShuffleItem? {
+    private fun extractSharedSpotifyText(intent: Intent?): String? {
         if (intent?.action != Intent.ACTION_SEND) return null
-        val sharedText = intent.getStringExtra(Intent.EXTRA_TEXT)?.trim().orEmpty()
-        if (sharedText.isBlank()) return null
-        return parseSpotifyUri(sharedText)
+        return intent.getStringExtra(Intent.EXTRA_TEXT)?.trim().orEmpty()
     }
 
     private fun parseSpotifyPlaylistRef(raw: String): PlaylistRef? {

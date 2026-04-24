@@ -67,4 +67,53 @@ class ShareIntentUiTest : AbstractUiTestCase() {
             onView(withText("Shared Playlist")).check(matches(isDisplayed()))
         }
     }
+
+
+    @Test
+    fun shareIntentShowsErrorForUnsupportedText() {
+        launchMainActivity(
+            Intent(Intent.ACTION_SEND).apply {
+                setClass(ApplicationProvider.getApplicationContext<Context>(), MainActivity::class.java)
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TEXT, "https://example.com/not-spotify")
+            },
+        )
+
+        waitUntil(label = "share action error to appear") {
+            onView(withText("Spotify album or playlist required for this Share action"))
+                .check(matches(isDisplayed()))
+        }
+    }
+
+    @Test
+    fun shareIntentShowsErrorForBlankText() {
+        launchMainActivity(
+            Intent(Intent.ACTION_SEND).apply {
+                setClass(ApplicationProvider.getApplicationContext<Context>(), MainActivity::class.java)
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TEXT, "   ")
+            },
+        )
+
+        waitUntil(label = "blank share action error to appear") {
+            onView(withText("Spotify album or playlist required for this Share action"))
+                .check(matches(isDisplayed()))
+        }
+    }
+
+    @Test
+    fun shareIntentShowsErrorWhenTextIsMissing() {
+        launchMainActivity(
+            Intent(Intent.ACTION_SEND).apply {
+                setClass(ApplicationProvider.getApplicationContext<Context>(), MainActivity::class.java)
+                type = "text/plain"
+            },
+        )
+
+        waitUntil(label = "missing share text error to appear") {
+            onView(withText("Spotify album or playlist required for this Share action"))
+                .check(matches(isDisplayed()))
+        }
+    }
+
 }
