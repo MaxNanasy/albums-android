@@ -1,5 +1,7 @@
 package io.github.maxnanasy.shufflebyalbum
 
+import android.app.Activity
+import android.app.Instrumentation
 import android.content.Context
 import android.content.Intent
 import androidx.test.core.app.ApplicationProvider
@@ -8,12 +10,40 @@ import androidx.test.espresso.assertion.ViewAssertions.matches
 import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
 import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import okhttp3.mockwebserver.MockResponse
+import org.junit.After
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class ShareIntentUiTest : AbstractUiTestCase() {
+    private lateinit var instrumentation: Instrumentation
+    private lateinit var targetContext: Context
+    private lateinit var shareIntentMonitor: Instrumentation.ActivityMonitor
+    private var launchedActivity: Activity? = null
+
+    @Before
+    fun setUpShareIntentMonitor() {
+        instrumentation = InstrumentationRegistry.getInstrumentation()
+        targetContext = ApplicationProvider.getApplicationContext()
+        shareIntentMonitor = instrumentation.addMonitor(MainActivity::class.java.name, null, false)
+        launchedActivity = null
+    }
+
+    @After
+    fun tearDownShareIntentMonitor() {
+        launchedActivity?.let { activity ->
+            instrumentation.runOnMainSync {
+                activity.finish()
+            }
+            instrumentation.waitForIdleSync()
+        }
+        launchedActivity = null
+        instrumentation.removeMonitor(shareIntentMonitor)
+    }
+
     @Test
     fun shareIntentAddsAlbum() {
         harness.seedConnectedSession()
@@ -28,13 +58,7 @@ class ShareIntentUiTest : AbstractUiTestCase() {
             },
         )
 
-        launchMainActivity(
-            Intent(Intent.ACTION_SEND).apply {
-                setClass(ApplicationProvider.getApplicationContext<Context>(), MainActivity::class.java)
-                type = "text/plain"
-                putExtra(Intent.EXTRA_TEXT, "https://open.spotify.com/album/sharedAlbum")
-            },
-        )
+        launchShareIntent(sharedText = "https://open.spotify.com/album/sharedAlbum")
 
         waitUntil(label = "shared album to appear in the list") {
             onView(withText("Shared Album")).check(matches(isDisplayed()))
@@ -55,65 +79,64 @@ class ShareIntentUiTest : AbstractUiTestCase() {
             },
         )
 
-        launchMainActivity(
-            Intent(Intent.ACTION_SEND).apply {
-                setClass(ApplicationProvider.getApplicationContext<Context>(), MainActivity::class.java)
-                type = "text/plain"
-                putExtra(Intent.EXTRA_TEXT, "https://open.spotify.com/playlist/sharedPlaylist?si=test")
-            },
-        )
+        launchShareIntent(sharedText = "https://open.spotify.com/playlist/sharedPlaylist?si=test")
 
         waitUntil(label = "shared playlist to appear in the list") {
             onView(withText("Shared Playlist")).check(matches(isDisplayed()))
         }
     }
 
-
     @Test
     fun shareIntentShowsErrorForUnsupportedText() {
-        launchMainActivity(
-            Intent(Intent.ACTION_SEND).apply {
-                setClass(ApplicationProvider.getApplicationContext<Context>(), MainActivity::class.java)
-                type = "text/plain"
-                putExtra(Intent.EXTRA_TEXT, "https://example.com/not-spotify")
-            },
-        )
+        launchShareIntent(sharedText = "https://example.com/not-spotify")
 
-        waitUntil(label = "share action error to appear") {
-            onView(withText("Spotify album or playlist required for this Share action"))
-                .check(matches(isDisplayed()))
-        }
+        assertShareErrorDisplayed(label = "share action error to appear")
     }
 
     @Test
     fun shareIntentShowsErrorForBlankText() {
-        launchMainActivity(
-            Intent(Intent.ACTION_SEND).apply {
-                setClass(ApplicationProvider.getApplicationContext<Context>(), MainActivity::class.java)
-                type = "text/plain"
-                putExtra(Intent.EXTRA_TEXT, "   ")
-            },
-        )
+        launchShareIntent(sharedText = "   ")
 
-        waitUntil(label = "blank share action error to appear") {
-            onView(withText("Spotify album or playlist required for this Share action"))
-                .check(matches(isDisplayed()))
-        }
+        assertShareErrorDisplayed(label = "blank share action error to appear")
     }
 
     @Test
     fun shareIntentShowsErrorWhenTextIsMissing() {
-        launchMainActivity(
+        launchShareIntent(includeTextExtra = false)
+
+        assertShareErrorDisplayed(label = "missing share text error to appear")
+    }
+
+    private fun launchShareIntent(sharedText: String? = null, includeTextExtra: Boolean = true) {
+        targetContext.startActivity(
             Intent(Intent.ACTION_SEND).apply {
-                setClass(ApplicationProvider.getApplicationContext<Context>(), MainActivity::class.java)
+                setPackage(targetContext.packageName)
                 type = "text/plain"
+                if (includeTextExtra) {
+                    putExtra(Intent.EXTRA_TEXT, sharedText)
+                }
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
             },
         )
 
-        waitUntil(label = "missing share text error to appear") {
-            onView(withText("Spotify album or playlist required for this Share action"))
-                .check(matches(isDisplayed()))
+        launchedActivity = shareIntentMonitor.waitForActivityWithTimeout(ACTIVITY_LAUNCH_TIMEOUT_MS)
+            ?: throw AssertionError("MainActivity was not launched for ACTION_SEND")
+
+        val launchedAction = launchedActivity?.intent?.action
+        if (launchedAction != Intent.ACTION_SEND) {
+            throw AssertionError("Expected ACTION_SEND intent, but was $launchedAction")
         }
     }
 
+    private fun assertShareErrorDisplayed(label: String) {
+        waitUntil(label = label) {
+            onView(withText(SHARE_ERROR_MESSAGE)).check(matches(isDisplayed()))
+        }
+    }
+
+    companion object {
+        private const val ACTIVITY_LAUNCH_TIMEOUT_MS = 5_000L
+        private const val SHARE_ERROR_MESSAGE =
+            "Spotify album or playlist required for this Share action"
+    }
 }
