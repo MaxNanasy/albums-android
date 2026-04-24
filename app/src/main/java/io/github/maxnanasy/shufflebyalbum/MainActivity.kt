@@ -341,10 +341,26 @@ class MainActivity : AppCompatActivity() {
     }
 
     private suspend fun handleIncomingIntent(intent: Intent?) {
-        if (ensureUsableStartupAuth(intent?.data)) {
-            return
+        when {
+            isSpotifyAuthRedirectIntent(intent) -> {
+                processAuthRedirect(intent?.data)
+            }
+
+            isSharedTextIntent(intent) -> {
+                ensureUsableStartupAuth()
+                processSharedSpotifyItem(intent)
+            }
+
+            else -> ensureUsableStartupAuth()
         }
-        processSharedSpotifyItem(intent)
+    }
+
+    private fun isSpotifyAuthRedirectIntent(intent: Intent?): Boolean {
+        return intent?.data?.scheme == "shufflebyalbum"
+    }
+
+    private fun isSharedTextIntent(intent: Intent?): Boolean {
+        return intent?.action == Intent.ACTION_SEND
     }
 
     private suspend fun processSharedSpotifyItem(intent: Intent?) {
@@ -359,27 +375,22 @@ class MainActivity : AppCompatActivity() {
         setIntent(Intent())
     }
 
-    private suspend fun ensureUsableStartupAuth(uri: Uri?): Boolean {
-        if (processAuthRedirect(uri)) {
-            return true
-        }
-
+    private suspend fun ensureUsableStartupAuth() {
         if (getToken() != null) {
             refreshAuthStatus()
-            return false
+            return
         }
 
         if (getStringPref(KEY_REFRESH_TOKEN).isNullOrBlank()) {
             refreshAuthStatus()
-            return false
+            return
         }
 
         val token = refreshSpotifyAccessToken()
         if (token == null) {
-            return false
+            return
         }
         refreshAuthStatus()
-        return false
     }
 
     private suspend fun processAuthRedirect(uri: Uri?): Boolean {
