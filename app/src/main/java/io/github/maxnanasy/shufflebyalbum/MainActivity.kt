@@ -96,8 +96,9 @@ class MainActivity : AppCompatActivity() {
         restoreRuntimeState()
 
         appScope.launch {
+            if (!isSpotifyAuthRedirectIntent(intent))
+                ensureUsableStartupAuth()
             handleIncomingIntent(intent)
-            ensureUsableStartupAuth()
             renderItemList()
             renderRemovedItems()
             renderQueue()
