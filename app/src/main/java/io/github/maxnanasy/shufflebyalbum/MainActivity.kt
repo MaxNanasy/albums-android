@@ -1693,7 +1693,8 @@ private fun HttpResult.describePlaylistImportFailure(): String {
         return normalizeSpotifyNetworkError(failureReason ?: "network error")
     }
     val details = extractErrorDetail(body)
-    val error = if (details.isNullOrBlank()) "status $status" else details
+        ?: body?.trim()?.takeIf { it.isNotEmpty() }
+    val error = if (details.isNullOrBlank()) "$status" else "$status $details"
     return "Error importing albums: $error"
 }
 

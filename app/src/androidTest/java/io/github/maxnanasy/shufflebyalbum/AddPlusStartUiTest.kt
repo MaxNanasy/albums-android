@@ -88,4 +88,34 @@ class AddPlusStartUiTest : AbstractUiTestCase() {
             )
         }
     }
+
+    @Test
+    fun showsPlaylistImportErrorForServerFailures() {
+        harness.seedConnectedSession()
+        harness.setDispatcher(
+            jsonDispatcher {
+                route("/v1/playlists/playlist123/items?limit=50&offset=0&additional_types=track&market=from_token") {
+                    MockResponse()
+                        .setResponseCode(500)
+                        .setHeader("Content-Type", "text/plain")
+                        .setBody("boom")
+                }
+            },
+        )
+
+        launchMainActivity()
+
+        onView(withId(R.id.itemUriInput)).perform(
+            replaceText("playlist123"),
+            closeSoftKeyboard(),
+        )
+        onView(withId(R.id.importPlaylistButton)).perform(click())
+
+        waitUntil(
+            label = "playlist import error message",
+        ) {
+            onView(withText("Error importing albums: 500 boom")).check(matches(isDisplayed()))
+        }
+    }
+
 }
