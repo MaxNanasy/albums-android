@@ -348,7 +348,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private suspend fun processSharedSpotifyItem(intent: Intent?) {
-        val sharedText = extractSharedSpotifyText(intent) ?: return
+        val sharedText = extractSharedText(intent) ?: return
         val sharedItem = parseSpotifyUri(sharedText)
         if (sharedItem == null) {
             snackbar("Spotify album or playlist required for this Share action")
@@ -1355,7 +1355,7 @@ class MainActivity : AppCompatActivity() {
         return null
     }
 
-    private fun extractSharedSpotifyText(intent: Intent?): String? {
+    private fun extractSharedText(intent: Intent?): String? {
         if (intent?.action != Intent.ACTION_SEND) return null
         return intent.getStringExtra(Intent.EXTRA_TEXT)?.trim().orEmpty()
     }
