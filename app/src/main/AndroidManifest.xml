@@ -28,7 +28,7 @@
                     android:scheme="shufflebyalbum" />
             </intent-filter>
 
-            <intent-filter>
+            <intent-filter android:label="Add">
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="text/plain" />
