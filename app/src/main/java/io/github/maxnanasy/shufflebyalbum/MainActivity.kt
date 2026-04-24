@@ -97,6 +97,7 @@ class MainActivity : AppCompatActivity() {
 
         appScope.launch {
             handleIncomingIntent(intent)
+            ensureUsableStartupAuth()
             renderItemList()
             renderRemovedItems()
             renderQueue()
@@ -347,11 +348,8 @@ class MainActivity : AppCompatActivity() {
             }
 
             isSharedTextIntent(intent) -> {
-                ensureUsableStartupAuth()
                 processSharedSpotifyItem(intent)
             }
-
-            else -> ensureUsableStartupAuth()
         }
     }
 
