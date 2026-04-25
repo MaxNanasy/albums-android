@@ -24,8 +24,8 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data
-                    android:host="callback"
-                    android:scheme="shufflebyalbum" />
+                    android:host="callback2"
+                    android:scheme="shufflebyalbum2" />
             </intent-filter>
 
             <intent-filter android:label="Add">
