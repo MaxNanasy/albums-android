@@ -355,7 +355,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun isSpotifyAuthRedirectIntent(intent: Intent?): Boolean {
-        return intent?.data?.scheme == "shufflebyalbum"
+        return isSpotifyAuthRedirectUri(intent?.data)
+    }
+
+    private fun isSpotifyAuthRedirectUri(uri: Uri?): Boolean {
+        if (uri == null) return false
+        return (uri.scheme == "shufflebyalbum" && uri.host == "callback") ||
+            (uri.scheme == "https" && uri.host == "shuffle-by-album.com" && uri.path == "/callback")
     }
 
     private fun isSharedTextIntent(intent: Intent?): Boolean {
@@ -393,7 +399,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private suspend fun processAuthRedirect(uri: Uri?): Boolean {
-        if (uri == null || uri.scheme != "shufflebyalbum") return false
+        if (uri == null || !isSpotifyAuthRedirectUri(uri)) return false
         val error = uri.getQueryParameter("error")
         if (error != null) {
             authStatus.text = if (error == "access_denied") {
@@ -1529,7 +1535,7 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val SPOTIFY_APP_ID = "5082b1452bc24cc3a0955f2d1c4e5560"
-        private const val REDIRECT_URI = "shufflebyalbum://callback"
+        private const val REDIRECT_URI = "https://shuffle-by-album.com/callback"
         private const val PREFS_NAME = "shuffle-by-album"
         internal var spotifyAccountsBaseUrl = "https://accounts.spotify.com"
         internal var spotifyApiBaseUrl = "https://api.spotify.com/v1"
