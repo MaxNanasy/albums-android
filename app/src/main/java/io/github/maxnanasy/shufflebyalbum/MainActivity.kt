@@ -250,7 +250,7 @@ class MainActivity : AppCompatActivity() {
             .appendQueryParameter("redirect_uri", REDIRECT_URI)
             .appendQueryParameter("code_challenge_method", "S256")
             .appendQueryParameter("code_challenge", challenge)
-            .appendQueryParameter("show_dialog", "true")
+            .appendQueryParameter("show_dialog", "false")
             .build()
 
         try {
