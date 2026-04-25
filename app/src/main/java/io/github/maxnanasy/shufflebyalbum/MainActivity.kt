@@ -1,13 +1,11 @@
 package io.github.maxnanasy.shufflebyalbum
 
-import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.util.Base64
 import android.view.inputmethod.EditorInfo
 import android.view.LayoutInflater
 import android.view.View
@@ -16,10 +14,14 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.android.material.snackbar.Snackbar
+import com.spotify.sdk.android.auth.AuthorizationClient
+import com.spotify.sdk.android.auth.AuthorizationResponse
+import com.spotify.sdk.android.auth.AuthorizationRequest
 import com.spotify.android.appremote.api.AppRemote
 import com.spotify.android.appremote.api.ConnectionParams
 import com.spotify.android.appremote.api.Connector
@@ -42,8 +44,6 @@ import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.UnknownHostException
-import java.security.MessageDigest
-import java.security.SecureRandom
 import kotlin.math.min
 
 class MainActivity : AppCompatActivity() {
@@ -83,6 +83,20 @@ class MainActivity : AppCompatActivity() {
 
     private var undoSnackbar: Snackbar? = null
     private val playbackMonitorLoop by lazy { playbackMonitorLoopFactory() }
+    private val spotifyAuthLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            val response = if (result.resultCode == RESULT_CANCELED) {
+                AuthorizationResponse.Builder()
+                    .setType(AuthorizationResponse.Type.CANCELLED)
+                    .build()
+            } else {
+                AuthorizationClient.getResponse(result.resultCode, result.data)
+            }
+
+            appScope.launch {
+                handleSpotifyAuthorizationResponse(response)
+            }
+        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -96,8 +110,7 @@ class MainActivity : AppCompatActivity() {
         restoreRuntimeState()
 
         appScope.launch {
-            if (!isSpotifyAuthRedirectIntent(intent))
-                ensureUsableStartupAuth()
+            ensureUsableStartupAuth()
             handleIncomingIntent(intent)
             renderItemList()
             renderRemovedItems()
@@ -115,6 +128,7 @@ class MainActivity : AppCompatActivity() {
             handleIncomingIntent(intent)
         }
     }
+
 
     override fun onStop() {
         disconnectAppRemote()
@@ -239,25 +253,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startConnect() {
-        val verifier = randomString(64)
-        prefs.edit().putString(KEY_VERIFIER, verifier).apply()
-        val challenge = codeChallengeFromVerifier(verifier)
-
-        val authUri = spotifyAccountsUri("/authorize").buildUpon()
-            .appendQueryParameter("response_type", "code")
-            .appendQueryParameter("client_id", SPOTIFY_APP_ID)
-            .appendQueryParameter("scope", SCOPES.joinToString(" "))
-            .appendQueryParameter("redirect_uri", REDIRECT_URI)
-            .appendQueryParameter("code_challenge_method", "S256")
-            .appendQueryParameter("code_challenge", challenge)
-            .appendQueryParameter("show_dialog", "false")
+        val request = AuthorizationRequest.Builder(
+            SPOTIFY_APP_ID,
+            AuthorizationResponse.Type.TOKEN,
+            REDIRECT_URI,
+        )
+            .setScopes(SCOPES.toTypedArray())
+            .setShowDialog(false)
             .build()
 
-        try {
-            startActivity(Intent(Intent.ACTION_VIEW, authUri))
-        } catch (_: ActivityNotFoundException) {
-            snackbar("Unable to open browser for Spotify login")
-        }
+        val intent = AuthorizationClient.createLoginActivityIntent(this, request)
+        spotifyAuthLauncher.launch(intent)
     }
 
     private suspend fun connectAppRemote(): AppRemote {
@@ -343,19 +349,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private suspend fun handleIncomingIntent(intent: Intent?) {
-        when {
-            isSpotifyAuthRedirectIntent(intent) -> {
-                processAuthRedirect(intent?.data)
-            }
-
-            isSharedTextIntent(intent) -> {
-                processSharedSpotifyItem(intent)
-            }
+        if (isSharedTextIntent(intent)) {
+            processSharedSpotifyItem(intent)
         }
-    }
-
-    private fun isSpotifyAuthRedirectIntent(intent: Intent?): Boolean {
-        return intent?.data?.scheme == "shufflebyalbum"
     }
 
     private fun isSharedTextIntent(intent: Intent?): Boolean {
@@ -392,40 +388,55 @@ class MainActivity : AppCompatActivity() {
         refreshAuthStatus()
     }
 
-    private suspend fun processAuthRedirect(uri: Uri?): Boolean {
-        if (uri == null || uri.scheme != "shufflebyalbum") return false
-        val error = uri.getQueryParameter("error")
-        if (error != null) {
-            authStatus.text = if (error == "access_denied") {
-                "Spotify authorization denied"
-            } else {
-                "Spotify authorization error: $error"
+    private suspend fun handleSpotifyAuthorizationResponse(response: AuthorizationResponse) {
+        when (response.type) {
+            AuthorizationResponse.Type.TOKEN -> {
+                val accessToken = response.accessToken
+                if (accessToken.isNullOrBlank()) {
+                    authStatus.text = "Spotify authorization failed: Missing access token"
+                    reportError(snackbarMessage = "Spotify login did not return an access token")
+                    return
+                }
+                saveToken(
+                    TokenResponse(
+                        accessToken = accessToken,
+                        refreshToken = response.refreshToken,
+                        expiresIn = response.expiresIn.toLong().coerceAtLeast(1L),
+                        scope = SCOPES.joinToString(" "),
+                    ),
+                )
+                refreshAuthStatus()
+                renderItemList()
             }
-            prefs.edit().remove(KEY_VERIFIER).apply()
-            return true
-        }
-        val code = uri.getQueryParameter("code")
-        if (code.isNullOrBlank()) {
-            authStatus.text = "Spotify authorization failed: missing authorization code"
-            reportError(snackbarMessage = "Spotify login did not return an authorization code")
-            prefs.edit().remove(KEY_VERIFIER).apply()
-            return true
-        }
-        val verifier = getStringPref(KEY_VERIFIER)
-        if (verifier.isNullOrBlank()) {
-            authStatus.text = "Missing PKCE verifier; try connecting again"
-            return true
-        }
 
-        val token = exchangeCodeForToken(code, verifier) ?: run {
-            prefs.edit().remove(KEY_VERIFIER).apply()
-            return true
+            AuthorizationResponse.Type.ERROR -> {
+                val error = response.error
+                authStatus.text = if (error == "AUTHENTICATION_DENIED_BY_USER") {
+                    "Spotify authorization denied"
+                } else {
+                    "Spotify authorization error: ${error ?: "Unknown error"}"
+                }
+            }
+
+            AuthorizationResponse.Type.CANCELLED -> {
+                authStatus.text = "Spotify authorization denied"
+            }
+
+            AuthorizationResponse.Type.CODE -> {
+                authStatus.text = "Spotify authorization failed: Unexpected authorization code"
+                reportError(snackbarMessage = "Spotify login returned an authorization code instead of a token")
+            }
+
+            AuthorizationResponse.Type.EMPTY -> {
+                authStatus.text = "Spotify authorization failed: Empty response"
+                reportError(snackbarMessage = "Spotify login returned an empty response")
+            }
+
+            AuthorizationResponse.Type.UNKNOWN -> {
+                authStatus.text = "Spotify authorization failed: Unknown response"
+                reportError(snackbarMessage = "Spotify login returned an unknown response")
+            }
         }
-        saveToken(token)
-        prefs.edit().remove(KEY_VERIFIER).apply()
-        refreshAuthStatus()
-        renderItemList()
-        return true
     }
 
     private suspend fun addItem() {
@@ -1095,34 +1106,8 @@ class MainActivity : AppCompatActivity() {
             .remove(KEY_REFRESH_TOKEN)
             .remove(KEY_TOKEN_EXPIRY)
             .remove(KEY_TOKEN_SCOPE)
-            .remove(KEY_VERIFIER)
-            .apply()
+                        .apply()
         refreshAuthStatus()
-    }
-
-    private suspend fun exchangeCodeForToken(code: String, verifier: String): TokenResponse? {
-        val params = mapOf(
-            "grant_type" to "authorization_code",
-            "code" to code,
-            "redirect_uri" to REDIRECT_URI,
-            "client_id" to SPOTIFY_APP_ID,
-            "code_verifier" to verifier,
-        )
-        val response = formPost(spotifyAccountsUrl("/api/token"), params)
-        if (!response.ok || response.body == null) {
-            reportError(
-                statusView = authStatus,
-                statusMessage = "Spotify token exchange failed: ${spotifyFailureMessage(response.status, response.failureReason)}",
-            )
-            return null
-        }
-        return parseTokenResponse(response.body) ?: run {
-            reportError(
-                statusView = authStatus,
-                statusMessage = "Spotify token exchange failed: invalid token response",
-            )
-            null
-        }
     }
 
     private suspend fun refreshSpotifyAccessToken(): String? {
@@ -1407,10 +1392,6 @@ class MainActivity : AppCompatActivity() {
         return Regex("^spotify:(album|playlist):([a-zA-Z0-9]+)$").matchEntire(uri)?.groupValues?.get(2)
     }
 
-    private fun spotifyAccountsUri(path: String): Uri {
-        return Uri.parse(spotifyAccountsUrl(path))
-    }
-
     private fun spotifyAccountsUrl(path: String): String {
         return buildSpotifyUrl(spotifyAccountsBaseUrl, path)
     }
@@ -1421,21 +1402,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun buildSpotifyUrl(baseUrl: String, path: String): String {
         return "${baseUrl.trimEnd('/')}/${path.trimStart('/')}"
-    }
-
-    private fun codeChallengeFromVerifier(verifier: String): String {
-        val digest = MessageDigest.getInstance("SHA-256").digest(verifier.toByteArray())
-        return Base64.encodeToString(digest, Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
-    }
-
-    private fun randomString(length: Int): String {
-        val chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
-        val rng = SecureRandom()
-        return buildString {
-            repeat(length) {
-                append(chars[rng.nextInt(chars.length)])
-            }
-        }
     }
 
     private fun parseTokenResponse(raw: String): TokenResponse? {
@@ -1545,7 +1511,6 @@ class MainActivity : AppCompatActivity() {
             "app-remote-control",
         )
 
-        private const val KEY_VERIFIER = "shuffle-by-album.pkceVerifier"
         private const val KEY_TOKEN = "shuffle-by-album.token"
         private const val KEY_REFRESH_TOKEN = "shuffle-by-album.refreshToken"
         private const val KEY_TOKEN_EXPIRY = "shuffle-by-album.tokenExpiry"
