@@ -1529,7 +1529,7 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val SPOTIFY_APP_ID = "5082b1452bc24cc3a0955f2d1c4e5560"
-        private const val REDIRECT_URI = "shufflebyalbum2://callback2"
+        private const val REDIRECT_URI = "https://unused-but-required-redirect-uri.invalid"
         private const val PREFS_NAME = "shuffle-by-album"
         internal var spotifyAccountsBaseUrl = "https://accounts.spotify.com"
         internal var spotifyApiBaseUrl = "https://api.spotify.com/v1"
