@@ -22,6 +22,7 @@ import com.google.android.material.snackbar.Snackbar
 import com.spotify.sdk.android.auth.AuthorizationClient
 import com.spotify.sdk.android.auth.AuthorizationResponse
 import com.spotify.sdk.android.auth.AuthorizationRequest
+import com.spotify.sdk.android.auth.PKCEInformationFactory
 import com.spotify.android.appremote.api.AppRemote
 import com.spotify.android.appremote.api.ConnectionParams
 import com.spotify.android.appremote.api.Connector
@@ -128,7 +129,6 @@ class MainActivity : AppCompatActivity() {
             handleIncomingIntent(intent)
         }
     }
-
 
     override fun onStop() {
         disconnectAppRemote()
@@ -253,13 +253,24 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startConnect() {
+        val pkceInformation = runCatching { PKCEInformationFactory.create() }
+            .getOrElse {
+                authStatus.text = "Spotify authorization failed: Unable to prepare login"
+                reportError(snackbarMessage = "Spotify login setup failed")
+                return
+            }
+        prefs.edit()
+            .putString(KEY_VERIFIER, pkceInformation.verifier)
+            .apply()
+
         val request = AuthorizationRequest.Builder(
             SPOTIFY_APP_ID,
-            AuthorizationResponse.Type.TOKEN,
+            AuthorizationResponse.Type.CODE,
             REDIRECT_URI,
         )
             .setScopes(SCOPES.toTypedArray())
             .setShowDialog(false)
+            .setPkceInformation(pkceInformation)
             .build()
 
         val intent = AuthorizationClient.createLoginActivityIntent(this, request)
@@ -391,6 +402,7 @@ class MainActivity : AppCompatActivity() {
     private suspend fun handleSpotifyAuthorizationResponse(response: AuthorizationResponse) {
         when (response.type) {
             AuthorizationResponse.Type.TOKEN -> {
+                prefs.edit().remove(KEY_VERIFIER).apply()
                 val accessToken = response.accessToken
                 if (accessToken.isNullOrBlank()) {
                     authStatus.text = "Spotify authorization failed: Missing access token"
@@ -410,8 +422,12 @@ class MainActivity : AppCompatActivity() {
             }
 
             AuthorizationResponse.Type.ERROR -> {
+                prefs.edit().remove(KEY_VERIFIER).apply()
                 val error = response.error
-                authStatus.text = if (error == "AUTHENTICATION_DENIED_BY_USER") {
+                authStatus.text = if (
+                    error == "access_denied" ||
+                    error == "AUTHENTICATION_DENIED_BY_USER"
+                ) {
                     "Spotify authorization denied"
                 } else {
                     "Spotify authorization error: ${error ?: "Unknown error"}"
@@ -419,20 +435,42 @@ class MainActivity : AppCompatActivity() {
             }
 
             AuthorizationResponse.Type.CANCELLED -> {
+                prefs.edit().remove(KEY_VERIFIER).apply()
                 authStatus.text = "Spotify authorization denied"
             }
 
             AuthorizationResponse.Type.CODE -> {
-                authStatus.text = "Spotify authorization failed: Unexpected authorization code"
-                reportError(snackbarMessage = "Spotify login returned an authorization code instead of a token")
+                val code = response.code
+                if (code.isNullOrBlank()) {
+                    prefs.edit().remove(KEY_VERIFIER).apply()
+                    authStatus.text = "Spotify authorization failed: Missing authorization code"
+                    reportError(snackbarMessage = "Spotify login did not return an authorization code")
+                    return
+                }
+                val verifier = getStringPref(KEY_VERIFIER)
+                if (verifier.isNullOrBlank()) {
+                    authStatus.text = "Spotify authorization failed: Missing PKCE verifier"
+                    reportError(snackbarMessage = "Spotify login is missing the PKCE verifier")
+                    return
+                }
+                val token = exchangeCodeForToken(code, verifier) ?: run {
+                    prefs.edit().remove(KEY_VERIFIER).apply()
+                    return
+                }
+                prefs.edit().remove(KEY_VERIFIER).apply()
+                saveToken(token)
+                refreshAuthStatus()
+                renderItemList()
             }
 
             AuthorizationResponse.Type.EMPTY -> {
+                prefs.edit().remove(KEY_VERIFIER).apply()
                 authStatus.text = "Spotify authorization failed: Empty response"
                 reportError(snackbarMessage = "Spotify login returned an empty response")
             }
 
             AuthorizationResponse.Type.UNKNOWN -> {
+                prefs.edit().remove(KEY_VERIFIER).apply()
                 authStatus.text = "Spotify authorization failed: Unknown response"
                 reportError(snackbarMessage = "Spotify login returned an unknown response")
             }
@@ -1106,8 +1144,34 @@ class MainActivity : AppCompatActivity() {
             .remove(KEY_REFRESH_TOKEN)
             .remove(KEY_TOKEN_EXPIRY)
             .remove(KEY_TOKEN_SCOPE)
-                        .apply()
+            .remove(KEY_VERIFIER)
+            .apply()
         refreshAuthStatus()
+    }
+
+    private suspend fun exchangeCodeForToken(code: String, verifier: String): TokenResponse? {
+        val params = mapOf(
+            "grant_type" to "authorization_code",
+            "code" to code,
+            "redirect_uri" to REDIRECT_URI,
+            "client_id" to SPOTIFY_APP_ID,
+            "code_verifier" to verifier,
+        )
+        val response = formPost(spotifyAccountsUrl("/api/token"), params)
+        if (!response.ok || response.body == null) {
+            reportError(
+                statusView = authStatus,
+                statusMessage = "Spotify token exchange failed: ${spotifyFailureMessage(response.status, response.failureReason)}",
+            )
+            return null
+        }
+        return parseTokenResponse(response.body) ?: run {
+            reportError(
+                statusView = authStatus,
+                statusMessage = "Spotify token exchange failed: Invalid token response",
+            )
+            null
+        }
     }
 
     private suspend fun refreshSpotifyAccessToken(): String? {
@@ -1511,6 +1575,7 @@ class MainActivity : AppCompatActivity() {
             "app-remote-control",
         )
 
+        private const val KEY_VERIFIER = "shuffle-by-album.pkceVerifier"
         private const val KEY_TOKEN = "shuffle-by-album.token"
         private const val KEY_REFRESH_TOKEN = "shuffle-by-album.refreshToken"
         private const val KEY_TOKEN_EXPIRY = "shuffle-by-album.tokenExpiry"
