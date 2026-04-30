@@ -8,12 +8,20 @@ import sys
 from pathlib import Path
 
 SUITE_PATTERNS = [
-    'tests/ui/*.spec.js',
-    'tests/ui/**/*.spec.js',
+    '*/src/androidTest/*.kt',
+    '*/src/androidTest/**/*.kt',
 ]
 
-DESCRIBE_RE = re.compile(r'\btest\.describe(?:\.(?:only|skip|fixme))?\(\s*', re.MULTILINE)
-TEST_RE = re.compile(r'\btest(?:\.(?:only|skip|fixme|fail))?\(\s*', re.MULTILINE)
+TEST_ANNOTATIONS = {
+    'ParameterizedTest',
+    'RepeatedTest',
+    'Test',
+    'TestFactory',
+    'TestTemplate',
+}
+
+CLASS_DECL_RE = re.compile(r'\b(?:class|interface|object)\s+([A-Za-z_]\w*)\b')
+IDENTIFIER_RE = re.compile(r'[A-Za-z_]\w*')
 
 
 def git(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -36,12 +44,8 @@ def matches_any(path: str) -> bool:
 
 
 def list_working_copy_files(root: Path) -> list[str]:
-    tests_root = root / 'tests' / 'ui'
-    if not tests_root.exists():
-        return []
-
     paths: list[str] = []
-    for current_root, _dirs, files in os.walk(tests_root):
+    for current_root, _dirs, files in os.walk(root):
         for filename in files:
             relative_path = Path(current_root, filename).relative_to(root).as_posix()
             if matches_any(relative_path):
@@ -123,7 +127,7 @@ def find_matching(
             index = new_index
             continue
         ch = text[index]
-        if ch in ('"', "'", '`'):
+        if ch in ('"', "'"):
             index = skip_string(text, index)
             continue
         if ch == open_char:
@@ -140,82 +144,246 @@ def read_string_literal(text: str, index: int, limit: int | None = None) -> tupl
     if limit is None:
         limit = len(text)
     index = skip_space_and_comments(text, index, limit)
-    if index >= limit or text[index] not in ('"', "'", '`'):
+    if index >= limit or text[index] not in ('"', "'"):
         return None, index
+
     quote = text[index]
     index += 1
     chars: list[str] = []
+    escapes = {
+        'b': '\b',
+        'f': '\f',
+        'n': '\n',
+        'r': '\r',
+        't': '\t',
+        '"': '"',
+        "'": "'",
+        '\\': '\\',
+    }
     while index < limit:
         ch = text[index]
         if ch == '\\':
             if index + 1 >= limit:
                 break
-            chars.append(text[index + 1])
+            escaped = text[index + 1]
+            chars.append(escapes.get(escaped, escaped))
             index += 2
             continue
         if ch == quote:
-            return ''.join(chars).replace('\n', '\\n'), index + 1
+            return ''.join(chars), index + 1
         chars.append(ch)
         index += 1
     return None, index
 
 
-def find_arrow_block_start(text: str, index: int, limit: int) -> int | None:
-    while index < limit - 1:
+def extract_annotation_string(arguments: str | None) -> str | None:
+    if arguments is None:
+        return None
+    limit = len(arguments)
+    index = 0
+    while index < limit:
+        if arguments[index] in ('"', "'"):
+            value, _end = read_string_literal(arguments, index, limit)
+            return value
+        index += 1
+    return None
+
+
+def parse_annotation(text: str, index: int, limit: int) -> tuple[tuple[str, str | None] | None, int]:
+    if index >= limit or text[index] != '@':
+        return None, index
+
+    name_start = index + 1
+    while name_start < limit and text[name_start].isspace():
+        name_start += 1
+
+    name_end = name_start
+    while name_end < limit and (text[name_end].isalnum() or text[name_end] in '._'):
+        name_end += 1
+
+    if name_end == name_start:
+        return None, index + 1
+
+    full_name = text[name_start:name_end]
+    simple_name = full_name.rsplit('.', 1)[-1]
+
+    annotation_end = skip_space_and_comments(text, name_end, limit)
+    arguments: str | None = None
+    if annotation_end < limit and text[annotation_end] == '(':
+        closing = find_matching(text, annotation_end, '(', ')', limit)
+        if closing is None:
+            return (simple_name, None), limit
+        arguments = text[annotation_end + 1:closing]
+        annotation_end = closing + 1
+
+    value = extract_annotation_string(arguments) if simple_name == 'DisplayName' else None
+    return (simple_name, value), annotation_end
+
+
+def collect_declaration(text: str, index: int, limit: int) -> tuple[str, str | None, int]:
+    start = index
+    paren_depth = 0
+    bracket_depth = 0
+    while index < limit:
         new_index = skip_comment(text, index)
         if new_index != index:
             index = new_index
             continue
         ch = text[index]
-        if ch in ('"', "'", '`'):
+        if ch in ('"', "'"):
             index = skip_string(text, index)
             continue
-        if text.startswith('=>', index):
-            index = skip_space_and_comments(text, index + 2, limit)
-            return index if index < limit and text[index] == '{' else None
+        if ch == '(':
+            paren_depth += 1
+        elif ch == ')':
+            if paren_depth > 0:
+                paren_depth -= 1
+        elif ch == '[':
+            bracket_depth += 1
+        elif ch == ']':
+            if bracket_depth > 0:
+                bracket_depth -= 1
+        elif ch in '{;' and paren_depth == 0 and bracket_depth == 0:
+            return text[start:index], ch, index
         index += 1
+    return text[start:limit], None, limit
+
+
+def annotation_value(annotations: list[tuple[str, str | None]], name: str) -> str | None:
+    for annotation_name, value in annotations:
+        if annotation_name == name:
+            return value
+    return None
+
+
+def has_test_annotation(annotations: list[tuple[str, str | None]]) -> bool:
+    return any(name in TEST_ANNOTATIONS for name, _value in annotations)
+
+
+def parse_method_name(declaration: str) -> str | None:
+    match = re.search(r'\bfun\s+([A-Za-z_]\w*)\s*\(', declaration)
+    if match is None:
+        return None
+    return match.group(1)
+
+
+def skip_line(text: str, index: int, limit: int) -> int:
+    newline = text.find('\n', index, limit)
+    return limit if newline == -1 else newline + 1
+
+
+def find_top_level_class(text: str) -> tuple[str, str, int, int] | None:
+    index = 0
+    limit = len(text)
+    depth = 0
+    pending_annotations: list[tuple[str, str | None]] = []
+
+    while index < limit:
+        index = skip_space_and_comments(text, index, limit)
+        if index >= limit:
+            break
+
+        ch = text[index]
+        if ch in ('"', "'"):
+            index = skip_string(text, index)
+            continue
+
+        if depth == 0 and (text.startswith('package', index) or text.startswith('import', index)):
+            pending_annotations.clear()
+            index = skip_line(text, index, limit)
+            continue
+
+        if depth == 0 and ch == '@':
+            annotation, index = parse_annotation(text, index, limit)
+            if annotation is not None:
+                pending_annotations.append(annotation)
+            continue
+
+        if ch == '{':
+            depth += 1
+            pending_annotations.clear()
+            index += 1
+            continue
+
+        if ch == '}':
+            depth = max(0, depth - 1)
+            pending_annotations.clear()
+            index += 1
+            continue
+
+        if depth != 0:
+            index += 1
+            continue
+
+        declaration, terminator, terminator_index = collect_declaration(text, index, limit)
+        match = CLASS_DECL_RE.search(declaration)
+        if terminator == '{' and match is not None:
+            class_name = match.group(1)
+            class_display_name = annotation_value(pending_annotations, 'DisplayName') or class_name
+            class_close = find_matching(text, terminator_index, '{', '}', limit)
+            if class_close is None:
+                return None
+            return class_name, class_display_name, terminator_index, class_close
+
+        pending_annotations.clear()
+        if terminator is None:
+            break
+        if terminator == '{':
+            depth += 1
+        index = terminator_index + 1
+
     return None
 
 
 def parse_suite_tests(path: str, text: str) -> list[tuple[str, str]]:
-    events: list[tuple[int, str, int]] = []
-    for match in DESCRIBE_RE.finditer(text):
-        events.append((match.start(), 'describe', match.end()))
-    for match in TEST_RE.finditer(text):
-        events.append((match.start(), 'test', match.end()))
-    events.sort()
+    parsed_class = find_top_level_class(text)
+    if parsed_class is None:
+        return []
 
+    _class_name, suite_name, class_open, class_close = parsed_class
     suite_tests: list[tuple[str, str]] = []
-    describe_stack: list[tuple[int, str]] = []
-    for position, kind, index in events:
-        while describe_stack and position >= describe_stack[-1][0]:
-            describe_stack.pop()
+    base_filename = Path(path).name
 
-        title, after_title = read_string_literal(text, index)
-        if title is None:
+    index = class_open + 1
+    depth = 1
+    pending_annotations: list[tuple[str, str | None]] = []
+    while index < class_close:
+        index = skip_space_and_comments(text, index, class_close)
+        if index >= class_close:
+            break
+
+        ch = text[index]
+        if ch in ('"', "'"):
+            index = skip_string(text, index)
             continue
 
-        if kind == 'describe':
-            call_open = text.find('(', position)
-            if call_open == -1:
-                continue
-            call_close = find_matching(text, call_open, '(', ')')
-            if call_close is None:
-                continue
-            block_start = find_arrow_block_start(text, after_title, call_close)
-            if block_start is None:
-                continue
-            block_end = find_matching(text, block_start, '{', '}')
-            if block_end is None:
-                continue
-            describe_stack.append((block_end, title))
+        if depth == 1 and ch == '@':
+            annotation, index = parse_annotation(text, index, class_close)
+            if annotation is not None:
+                pending_annotations.append(annotation)
             continue
 
-        suite_title = ' > '.join(suite_title for _, suite_title in describe_stack)
-        if not suite_title:
-            suite_title = '(root)'
-        base_filename = path.rsplit('/', 1)[-1]
-        suite_tests.append((f'{suite_title} [{base_filename}]:', title))
+        if depth != 1:
+            if ch == '{':
+                depth += 1
+            elif ch == '}':
+                depth -= 1
+            index += 1
+            continue
+
+        declaration, terminator, terminator_index = collect_declaration(text, index, class_close)
+        if terminator == '{' and has_test_annotation(pending_annotations):
+            method_name = parse_method_name(declaration)
+            if method_name is not None:
+                test_name = annotation_value(pending_annotations, 'DisplayName') or method_name
+                suite_tests.append((f'{suite_name} [{base_filename}]:', test_name))
+
+        pending_annotations.clear()
+        if terminator is None:
+            break
+        if terminator == '{':
+            depth += 1
+        index = terminator_index + 1
 
     return suite_tests
 
