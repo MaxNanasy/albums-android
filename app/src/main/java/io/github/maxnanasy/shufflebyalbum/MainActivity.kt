@@ -401,26 +401,6 @@ class MainActivity : AppCompatActivity() {
 
     private suspend fun handleSpotifyAuthorizationResponse(response: AuthorizationResponse) {
         when (response.type) {
-            AuthorizationResponse.Type.TOKEN -> {
-                prefs.edit().remove(KEY_VERIFIER).apply()
-                val accessToken = response.accessToken
-                if (accessToken.isNullOrBlank()) {
-                    authStatus.text = "Spotify authorization failed: Missing access token"
-                    reportError(snackbarMessage = "Spotify login did not return an access token")
-                    return
-                }
-                saveToken(
-                    TokenResponse(
-                        accessToken = accessToken,
-                        refreshToken = response.refreshToken,
-                        expiresIn = response.expiresIn.toLong().coerceAtLeast(1L),
-                        scope = SCOPES.joinToString(" "),
-                    ),
-                )
-                refreshAuthStatus()
-                renderItemList()
-            }
-
             AuthorizationResponse.Type.ERROR -> {
                 prefs.edit().remove(KEY_VERIFIER).apply()
                 val error = response.error
@@ -463,16 +443,10 @@ class MainActivity : AppCompatActivity() {
                 renderItemList()
             }
 
-            AuthorizationResponse.Type.EMPTY -> {
+            else -> {
                 prefs.edit().remove(KEY_VERIFIER).apply()
-                authStatus.text = "Spotify authorization failed: Empty response"
-                reportError(snackbarMessage = "Spotify login returned an empty response")
-            }
-
-            AuthorizationResponse.Type.UNKNOWN -> {
-                prefs.edit().remove(KEY_VERIFIER).apply()
-                authStatus.text = "Spotify authorization failed: Unknown response"
-                reportError(snackbarMessage = "Spotify login returned an unknown response")
+                authStatus.text = "Spotify authorization failed: Unexpected response type: ${response.type}"
+                reportError(snackbarMessage = "Spotify login returned an unexpected response type")
             }
         }
     }
