@@ -1,16 +1,21 @@
 package io.github.maxnanasy.shufflebyalbum
 
 import android.content.Context
+import android.content.Intent
 import android.os.SystemClock
+import android.view.View
+import android.view.ViewGroup
 import android.widget.TextView
 import androidx.annotation.IdRes
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.recyclerview.widget.RecyclerView
 import com.spotify.android.appremote.api.AppRemote
 import com.spotify.android.appremote.api.PlayerApi
 import com.spotify.protocol.client.CallResult
 import com.spotify.protocol.types.Types
+import com.spotify.sdk.android.auth.AuthorizationResponse
 import java.io.IOException
 import java.lang.IllegalStateException
 import java.lang.reflect.Proxy
@@ -41,8 +46,13 @@ abstract class AbstractUiTestCase {
         harness.close()
     }
 
-    protected fun launchMainActivity(): ActivityScenario<MainActivity> {
-        return ActivityScenario.launch(MainActivity::class.java).also { launchedScenario ->
+    protected fun launchMainActivity(intent: Intent? = null): ActivityScenario<MainActivity> {
+        scenario?.close()
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val launchIntent = intent ?: Intent(context, MainActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        return ActivityScenario.launch<MainActivity>(launchIntent).also { launchedScenario ->
             scenario = launchedScenario
         }
     }
@@ -117,6 +127,41 @@ abstract class AbstractUiTestCase {
         }
         return text
     }
+
+    protected fun performOnActivity(action: (MainActivity) -> Unit) {
+        scenario?.onActivity(action)
+            ?: throw AssertionError("MainActivity has not been launched")
+    }
+
+    protected fun deliverSpotifyAuthorizationResponse(response: AuthorizationResponse) {
+        performOnActivity { activity ->
+            activity.completeSpotifyAuthorizationForTest(response)
+        }
+    }
+
+    protected fun textsInRecycler(@IdRes recyclerId: Int, @IdRes textViewId: Int): List<String> {
+        var texts = emptyList<String>()
+        scenario?.onActivity { activity ->
+            val recycler = activity.findViewById<RecyclerView>(recyclerId)
+            texts = buildList {
+                repeat(recycler.childCount) { index ->
+                    collectTexts(recycler.getChildAt(index), textViewId, this)
+                }
+            }
+        }
+        return texts
+    }
+
+    private fun collectTexts(view: View, @IdRes textViewId: Int, texts: MutableList<String>) {
+        if (view.id == textViewId && view is TextView) {
+            texts += view.text.toString()
+        }
+        if (view is ViewGroup) {
+            repeat(view.childCount) { index ->
+                collectTexts(view.getChildAt(index), textViewId, texts)
+            }
+        }
+    }
 }
 
 class UiTestHarness : AutoCloseable {
@@ -125,6 +170,7 @@ class UiTestHarness : AutoCloseable {
     val server = MockWebServer()
     val spotifyAppRemoteService = TestSpotifyAppRemoteService()
     val playbackMonitorLoop = TestPlaybackMonitorLoop()
+    internal val authorizationLaunchAttempts = mutableListOf<AuthorizationLaunchAttempt>()
     private val unexpectedRequestFailure = AtomicReference<AssertionError?>(null)
     private var started = false
 
@@ -139,6 +185,9 @@ class UiTestHarness : AutoCloseable {
         MainActivity.spotifyApiBaseUrl = server.url("/v1").toString()
         MainActivity.spotifyAppRemoteService = spotifyAppRemoteService
         MainActivity.playbackMonitorLoopFactory = { playbackMonitorLoop }
+        MainActivity.authorizationLaunchInterceptor = { attempt ->
+            authorizationLaunchAttempts += attempt
+        }
     }
 
     fun setDispatcher(dispatcher: Dispatcher) {
@@ -148,15 +197,6 @@ class UiTestHarness : AutoCloseable {
                 reason = "No matching handler was configured for this request.",
             )
         }
-    }
-
-    fun enqueueJson(body: String, statusCode: Int = 200): MockResponse {
-        val response = MockResponse()
-            .setResponseCode(statusCode)
-            .setHeader("Content-Type", "application/json")
-            .setBody(body)
-        server.enqueue(response)
-        return response
     }
 
     fun seedConnectedSession(
@@ -174,27 +214,80 @@ class UiTestHarness : AutoCloseable {
     }
 
     fun seedSavedItems(items: List<ShuffleItem>) {
-        val array = JSONArray()
-        items.forEach { item ->
-            array.put(
-                JSONObject()
-                    .put("type", item.type)
-                    .put("uri", item.uri)
-                    .put("title", item.title),
-            )
-        }
-        prefs.edit().putString(KEY_ITEMS, array.toString()).commit()
+        prefs.edit()
+            .putString(KEY_ITEMS, serializeShuffleItems(items).toString())
+            .commit()
+    }
+
+    fun seedRemovedItems(items: List<ShuffleItem>) {
+        prefs.edit()
+            .putString(KEY_REMOVED_ITEMS, serializeShuffleItems(items).toString())
+            .commit()
+    }
+
+    fun seedRuntimeState(
+        activationState: ActivationState,
+        queue: List<ShuffleItem>,
+        index: Int = 0,
+        currentUri: String? = null,
+        observedCurrentContext: Boolean = false,
+    ) {
+        val payload = JSONObject()
+            .put("activationState", activationState.value)
+            .put("queue", serializeShuffleItems(queue))
+            .put("index", index)
+            .put("currentUri", currentUri)
+            .put("observedCurrentContext", observedCurrentContext)
+        prefs.edit().putString(KEY_RUNTIME, payload.toString()).commit()
+    }
+
+    fun seedRawRuntimeState(raw: String) {
+        prefs.edit().putString(KEY_RUNTIME, raw).commit()
+    }
+
+    fun seedVerifier(verifier: String = "verifier") {
+        prefs.edit().putString(KEY_VERIFIER, verifier).commit()
+    }
+
+    fun clearAccessToken() {
+        prefs.edit()
+            .remove(KEY_TOKEN)
+            .remove(KEY_TOKEN_EXPIRY)
+            .commit()
+    }
+
+    fun seedRawItemsJson(raw: String) {
+        prefs.edit().putString(KEY_ITEMS, raw).commit()
+    }
+
+    fun seedRawRemovedItemsJson(raw: String) {
+        prefs.edit().putString(KEY_REMOVED_ITEMS, raw).commit()
+    }
+
+    fun useIdentityShuffle() {
+        MainActivity.shuffleOverride = { items -> items.toMutableList() }
+    }
+
+    fun readStringPref(key: String): String? {
+        return prefs.getString(key, null)
+    }
+
+    fun readLongPref(key: String): Long {
+        return prefs.getLong(key, Long.MIN_VALUE)
     }
 
     fun clearAppState() {
         prefs.edit().clear().commit()
         spotifyAppRemoteService.reset()
         playbackMonitorLoop.reset()
+        authorizationLaunchAttempts.clear()
         unexpectedRequestFailure.set(null)
         MainActivity.spotifyAccountsBaseUrl = DEFAULT_SPOTIFY_ACCOUNTS_BASE_URL
         MainActivity.spotifyApiBaseUrl = DEFAULT_SPOTIFY_API_BASE_URL
         MainActivity.spotifyAppRemoteService = spotifyAppRemoteService
         MainActivity.playbackMonitorLoopFactory = MainActivity.defaultPlaybackMonitorLoopFactory
+        MainActivity.authorizationLaunchInterceptor = null
+        MainActivity.shuffleOverride = null
     }
 
     override fun close() {
@@ -209,6 +302,19 @@ class UiTestHarness : AutoCloseable {
             started = false
         }
         failure?.let { throw it }
+    }
+
+    private fun serializeShuffleItems(items: List<ShuffleItem>): JSONArray {
+        return JSONArray().apply {
+            items.forEach { item ->
+                put(
+                    JSONObject()
+                        .put("type", item.type)
+                        .put("uri", item.uri)
+                        .put("title", item.title),
+                )
+            }
+        }
     }
 
     private fun failOnUnexpectedRequests(reason: String): Dispatcher {
@@ -236,12 +342,15 @@ class UiTestHarness : AutoCloseable {
     }
 
     companion object {
-        private const val PREFS_NAME = "shuffle-by-album"
-        private const val KEY_TOKEN = "shuffle-by-album.token"
-        private const val KEY_REFRESH_TOKEN = "shuffle-by-album.refreshToken"
-        private const val KEY_TOKEN_EXPIRY = "shuffle-by-album.tokenExpiry"
-        private const val KEY_TOKEN_SCOPE = "shuffle-by-album.tokenScope"
-        private const val KEY_ITEMS = "shuffle-by-album.items"
+        const val PREFS_NAME: String = "shuffle-by-album"
+        const val KEY_VERIFIER: String = "shuffle-by-album.pkceVerifier"
+        const val KEY_TOKEN: String = "shuffle-by-album.token"
+        const val KEY_REFRESH_TOKEN: String = "shuffle-by-album.refreshToken"
+        const val KEY_TOKEN_EXPIRY: String = "shuffle-by-album.tokenExpiry"
+        const val KEY_TOKEN_SCOPE: String = "shuffle-by-album.tokenScope"
+        const val KEY_ITEMS: String = "shuffle-by-album.items"
+        const val KEY_REMOVED_ITEMS: String = "shuffle-by-album.removedItems"
+        const val KEY_RUNTIME: String = "shuffle-by-album.runtime"
         private const val DEFAULT_TOKEN_SCOPES =
             "user-modify-playback-state user-read-playback-state playlist-read-private playlist-read-collaborative app-remote-control"
         private const val DEFAULT_SPOTIFY_ACCOUNTS_BASE_URL = "https://accounts.spotify.com"
@@ -297,7 +406,9 @@ class TestSpotifyAppRemoteService : SpotifyAppRemoteService {
 
     var spotifyInstalled = true
     var connectFailure: Throwable? = null
-    var commandFailure: Throwable? = null
+    var shuffleFailure: Throwable? = null
+    var repeatFailure: Throwable? = null
+    var playFailure: Throwable? = null
     var disconnectCount = 0
     val commands = mutableListOf<PlayerCommand>()
     private var connected = false
@@ -329,7 +440,9 @@ class TestSpotifyAppRemoteService : SpotifyAppRemoteService {
     fun reset() {
         spotifyInstalled = true
         connectFailure = null
-        commandFailure = null
+        shuffleFailure = null
+        repeatFailure = null
+        playFailure = null
         disconnectCount = 0
         commands.clear()
         connected = false
@@ -343,15 +456,15 @@ class TestSpotifyAppRemoteService : SpotifyAppRemoteService {
             when (method.name) {
                 "play" -> {
                     commands += PlayerCommand.Play(uri = args?.get(0) as String)
-                    completedCallResult(commandFailure)
+                    completedCallResult(playFailure)
                 }
                 "setShuffle" -> {
                     commands += PlayerCommand.SetShuffle(enabled = args?.get(0) as Boolean)
-                    completedCallResult(commandFailure)
+                    completedCallResult(shuffleFailure)
                 }
                 "setRepeat" -> {
                     commands += PlayerCommand.SetRepeat(mode = args?.get(0) as Int)
-                    completedCallResult(commandFailure)
+                    completedCallResult(repeatFailure)
                 }
                 "toString" -> "TestPlayerApi"
                 "hashCode" -> System.identityHashCode(proxy)

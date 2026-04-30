@@ -141,6 +141,12 @@ class MainActivity : AppCompatActivity() {
         appScope.cancel()
     }
 
+    internal fun completeSpotifyAuthorizationForTest(response: AuthorizationResponse) {
+        appScope.launch {
+            handleSpotifyAuthorizationResponse(response)
+        }
+    }
+
     private fun bindViews() {
         authStatus = findViewById(R.id.authStatus)
         playbackStatus = findViewById(R.id.playbackStatus)
@@ -272,6 +278,19 @@ class MainActivity : AppCompatActivity() {
             .setShowDialog(false)
             .setPkceInformation(pkceInformation)
             .build()
+
+        authorizationLaunchInterceptor?.let { interceptor ->
+            interceptor(
+                AuthorizationLaunchAttempt(
+                    responseType = "code",
+                    redirectUri = REDIRECT_URI,
+                    scopes = SCOPES,
+                    showDialog = false,
+                    codeChallengeMethod = "S256",
+                ),
+            )
+            return
+        }
 
         val intent = AuthorizationClient.createLoginActivityIntent(this, request)
         spotifyAuthLauncher.launch(intent)
@@ -514,7 +533,7 @@ class MainActivity : AppCompatActivity() {
 
         session = session.copy(
             activationState = ActivationState.ACTIVE,
-            queue = items.shuffled().toMutableList(),
+            queue = shuffleOverride?.invoke(items) ?: items.shuffled().toMutableList(),
             index = 0,
         )
         persistRuntimeState()
@@ -1540,6 +1559,8 @@ class MainActivity : AppCompatActivity() {
         internal var spotifyAppRemoteService: SpotifyAppRemoteService = RealSpotifyAppRemoteService
         internal val defaultPlaybackMonitorLoopFactory: () -> PlaybackMonitorLoop = { HandlerPlaybackMonitorLoop() }
         internal var playbackMonitorLoopFactory: () -> PlaybackMonitorLoop = defaultPlaybackMonitorLoopFactory
+        internal var authorizationLaunchInterceptor: ((AuthorizationLaunchAttempt) -> Unit)? = null
+        internal var shuffleOverride: ((List<ShuffleItem>) -> MutableList<ShuffleItem>)? = null
 
         private val SCOPES = listOf(
             "user-modify-playback-state",
@@ -1658,6 +1679,14 @@ data class ShuffleItem(
     val type: String,
     val uri: String,
     val title: String,
+)
+
+internal data class AuthorizationLaunchAttempt(
+    val responseType: String,
+    val redirectUri: String,
+    val scopes: List<String>,
+    val showDialog: Boolean,
+    val codeChallengeMethod: String,
 )
 
 private data class PlaylistAlbumImportResult(
