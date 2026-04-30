@@ -13,8 +13,10 @@ import androidx.test.platform.app.InstrumentationRegistry
 import okhttp3.mockwebserver.MockResponse
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 
+@DisplayName("Share Intent")
 class ShareIntentUiTest : AbstractUiTestCase() {
     private lateinit var instrumentation: Instrumentation
     private lateinit var targetContext: Context
@@ -42,6 +44,7 @@ class ShareIntentUiTest : AbstractUiTestCase() {
     }
 
     @Test
+    @DisplayName("Share intent adds album")
     fun shareIntentAddsAlbum() {
         harness.seedConnectedSession()
         harness.setDispatcher(
@@ -63,6 +66,7 @@ class ShareIntentUiTest : AbstractUiTestCase() {
     }
 
     @Test
+    @DisplayName("Share intent adds playlist without importing albums")
     fun shareIntentAddsPlaylistWithoutImportingAlbums() {
         harness.seedConnectedSession()
         harness.setDispatcher(
@@ -84,6 +88,7 @@ class ShareIntentUiTest : AbstractUiTestCase() {
     }
 
     @Test
+    @DisplayName("Share intent shows error for unsupported text")
     fun shareIntentShowsErrorForUnsupportedText() {
         launchShareIntent(sharedText = "https://example.com/not-spotify")
 
@@ -91,6 +96,7 @@ class ShareIntentUiTest : AbstractUiTestCase() {
     }
 
     @Test
+    @DisplayName("Share intent shows error for blank text")
     fun shareIntentShowsErrorForBlankText() {
         launchShareIntent(sharedText = "   ")
 
@@ -98,6 +104,7 @@ class ShareIntentUiTest : AbstractUiTestCase() {
     }
 
     @Test
+    @DisplayName("Share intent shows error when text is missing")
     fun shareIntentShowsErrorWhenTextIsMissing() {
         launchShareIntent(includeTextExtra = false)
 
