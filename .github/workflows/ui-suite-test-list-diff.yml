@@ -1,0 +1,51 @@
+name: UI Suite/Test List Diff
+
+on:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
+
+permissions:
+  contents: read
+
+jobs:
+  ui-suite-test-list-diff:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Show UI test list diff
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git fetch --no-tags origin "${BASE_REF}"
+
+          merge_base="$(git merge-base HEAD "origin/${BASE_REF}")"
+          head_sha="$(git rev-parse HEAD)"
+
+          test_list_diff="$(scripts/ui-test-list-diff "${merge_base}" HEAD)"
+
+          printf 'Merge base: %s\n' "${merge_base}"
+          printf 'Base branch: %s\n' "${BASE_REF}"
+          printf 'Head: %s\n' "${head_sha}"
+          printf '\n===== UI test list diff =====\n%s\n' "${test_list_diff}"
+
+          {
+            printf '# UI Suite/Test List Diff\n\n'
+            printf -- '- Merge base: `%s`\n' "${merge_base}"
+            printf -- '- Base branch: `%s`\n' "${BASE_REF}"
+            printf -- '- Head: `%s`\n\n' "${head_sha}"
+            printf '## UI test list diff\n\n'
+            printf '```diff\n%s\n```\n' "${test_list_diff}"
+          } >> "${GITHUB_STEP_SUMMARY}"

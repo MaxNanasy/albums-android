@@ -1,0 +1,267 @@
+#!/usr/bin/env python3
+
+import fnmatch
+import os
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+SUITE_PATTERNS = [
+    'tests/ui/*.spec.js',
+    'tests/ui/**/*.spec.js',
+]
+
+DESCRIBE_RE = re.compile(r'\btest\.describe(?:\.(?:only|skip|fixme))?\(\s*', re.MULTILINE)
+TEST_RE = re.compile(r'\btest(?:\.(?:only|skip|fixme|fail))?\(\s*', re.MULTILINE)
+
+
+def git(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ['git', *args],
+        check=check,
+        capture_output=True,
+        text=True,
+        encoding='utf-8',
+        errors='surrogateescape',
+    )
+
+
+def repo_root() -> Path:
+    return Path(git('rev-parse', '--show-toplevel').stdout.strip())
+
+
+def matches_any(path: str) -> bool:
+    return any(fnmatch.fnmatch(path, pattern) for pattern in SUITE_PATTERNS)
+
+
+def list_working_copy_files(root: Path) -> list[str]:
+    tests_root = root / 'tests' / 'ui'
+    if not tests_root.exists():
+        return []
+
+    paths: list[str] = []
+    for current_root, _dirs, files in os.walk(tests_root):
+        for filename in files:
+            relative_path = Path(current_root, filename).relative_to(root).as_posix()
+            if matches_any(relative_path):
+                paths.append(relative_path)
+    return sorted(paths)
+
+
+def list_ref_files(ref: str) -> list[str]:
+    return sorted(path for path in git('ls-tree', '-r', '--name-only', ref).stdout.splitlines() if matches_any(path))
+
+
+def working_copy_file_at(root: Path, path: str) -> str | None:
+    file_path = root / Path(path)
+    if not file_path.is_file():
+        return None
+    return file_path.read_text(encoding='utf-8', errors='surrogateescape')
+
+
+def ref_file_at(ref: str, path: str) -> str | None:
+    result = git('show', f'{ref}:{path}', check=False)
+    if result.returncode != 0:
+        return None
+    return result.stdout
+
+
+def skip_string(text: str, index: int) -> int:
+    quote = text[index]
+    index += 1
+    while index < len(text):
+        ch = text[index]
+        if ch == '\\':
+            index += 2
+            continue
+        if ch == quote:
+            return index + 1
+        index += 1
+    return index
+
+
+def skip_comment(text: str, index: int) -> int:
+    if text.startswith('//', index):
+        newline = text.find('\n', index + 2)
+        return len(text) if newline == -1 else newline + 1
+    if text.startswith('/*', index):
+        end = text.find('*/', index + 2)
+        return len(text) if end == -1 else end + 2
+    return index
+
+
+def skip_space_and_comments(text: str, index: int, limit: int | None = None) -> int:
+    if limit is None:
+        limit = len(text)
+    while index < limit:
+        new_index = skip_comment(text, index)
+        if new_index != index:
+            index = new_index
+            continue
+        if text[index].isspace():
+            index += 1
+            continue
+        break
+    return index
+
+
+def find_matching(
+    text: str,
+    start: int,
+    open_char: str,
+    close_char: str,
+    limit: int | None = None,
+) -> int | None:
+    if limit is None:
+        limit = len(text)
+    depth = 1
+    index = start + 1
+    while index < limit:
+        new_index = skip_comment(text, index)
+        if new_index != index:
+            index = new_index
+            continue
+        ch = text[index]
+        if ch in ('"', "'", '`'):
+            index = skip_string(text, index)
+            continue
+        if ch == open_char:
+            depth += 1
+        elif ch == close_char:
+            depth -= 1
+            if depth == 0:
+                return index
+        index += 1
+    return None
+
+
+def read_string_literal(text: str, index: int, limit: int | None = None) -> tuple[str | None, int]:
+    if limit is None:
+        limit = len(text)
+    index = skip_space_and_comments(text, index, limit)
+    if index >= limit or text[index] not in ('"', "'", '`'):
+        return None, index
+    quote = text[index]
+    index += 1
+    chars: list[str] = []
+    while index < limit:
+        ch = text[index]
+        if ch == '\\':
+            if index + 1 >= limit:
+                break
+            chars.append(text[index + 1])
+            index += 2
+            continue
+        if ch == quote:
+            return ''.join(chars).replace('\n', '\\n'), index + 1
+        chars.append(ch)
+        index += 1
+    return None, index
+
+
+def find_arrow_block_start(text: str, index: int, limit: int) -> int | None:
+    while index < limit - 1:
+        new_index = skip_comment(text, index)
+        if new_index != index:
+            index = new_index
+            continue
+        ch = text[index]
+        if ch in ('"', "'", '`'):
+            index = skip_string(text, index)
+            continue
+        if text.startswith('=>', index):
+            index = skip_space_and_comments(text, index + 2, limit)
+            return index if index < limit and text[index] == '{' else None
+        index += 1
+    return None
+
+
+def parse_suite_tests(path: str, text: str) -> list[tuple[str, str]]:
+    events: list[tuple[int, str, int]] = []
+    for match in DESCRIBE_RE.finditer(text):
+        events.append((match.start(), 'describe', match.end()))
+    for match in TEST_RE.finditer(text):
+        events.append((match.start(), 'test', match.end()))
+    events.sort()
+
+    suite_tests: list[tuple[str, str]] = []
+    describe_stack: list[tuple[int, str]] = []
+    for position, kind, index in events:
+        while describe_stack and position >= describe_stack[-1][0]:
+            describe_stack.pop()
+
+        title, after_title = read_string_literal(text, index)
+        if title is None:
+            continue
+
+        if kind == 'describe':
+            call_open = text.find('(', position)
+            if call_open == -1:
+                continue
+            call_close = find_matching(text, call_open, '(', ')')
+            if call_close is None:
+                continue
+            block_start = find_arrow_block_start(text, after_title, call_close)
+            if block_start is None:
+                continue
+            block_end = find_matching(text, block_start, '{', '}')
+            if block_end is None:
+                continue
+            describe_stack.append((block_end, title))
+            continue
+
+        suite_title = ' > '.join(suite_title for _, suite_title in describe_stack)
+        if not suite_title:
+            suite_title = '(root)'
+        base_filename = path.rsplit('/', 1)[-1]
+        suite_tests.append((f'{suite_title} [{base_filename}]:', title))
+
+    return suite_tests
+
+
+def render_test_list(suite_tests: list[tuple[str, str]]) -> str:
+    lines: list[str] = []
+    current_suite: str | None = None
+    for suite_title, test_title in suite_tests:
+        if suite_title != current_suite:
+            if lines:
+                lines.append('')
+            lines.append(suite_title)
+            current_suite = suite_title
+        lines.append(f'  {test_title}')
+    return ''.join(f'{line}\n' for line in lines)
+
+
+def suite_test_list(ref: str | None) -> str:
+    if ref is None:
+        root = repo_root()
+        suite_files = list_working_copy_files(root)
+        suite_tests: list[tuple[str, str]] = []
+        for path in suite_files:
+            text = working_copy_file_at(root, path)
+            if text is not None:
+                suite_tests.extend(parse_suite_tests(path, text))
+        return render_test_list(suite_tests)
+
+    suite_files = list_ref_files(ref)
+    suite_tests: list[tuple[str, str]] = []
+    for path in suite_files:
+        text = ref_file_at(ref, path)
+        if text is not None:
+            suite_tests.extend(parse_suite_tests(path, text))
+    return render_test_list(suite_tests)
+
+
+def main() -> int:
+    if len(sys.argv) > 2:
+        print(f'Usage: {sys.argv[0]} [ref]', file=sys.stderr)
+        return 1
+
+    ref = sys.argv[1] if len(sys.argv) == 2 else None
+    print(suite_test_list(ref), end='')
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())
