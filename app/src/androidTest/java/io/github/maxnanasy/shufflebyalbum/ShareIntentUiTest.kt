@@ -92,7 +92,7 @@ class ShareIntentUiTest : AbstractUiTestCase() {
     fun shareIntentShowsErrorForUnsupportedText() {
         launchShareIntent(sharedText = "https://example.com/not-spotify")
 
-        assertShareErrorDisplayed(label = "share action error to appear")
+        assertShareErrorDisplayed(waitLabel = "share action error to appear")
     }
 
     @Test
@@ -100,7 +100,7 @@ class ShareIntentUiTest : AbstractUiTestCase() {
     fun shareIntentShowsErrorForBlankText() {
         launchShareIntent(sharedText = "   ")
 
-        assertShareErrorDisplayed(label = "blank share action error to appear")
+        assertShareErrorDisplayed(waitLabel = "blank share action error to appear")
     }
 
     @Test
@@ -108,7 +108,7 @@ class ShareIntentUiTest : AbstractUiTestCase() {
     fun shareIntentShowsErrorWhenTextIsMissing() {
         launchShareIntent(includeTextExtra = false)
 
-        assertShareErrorDisplayed(label = "missing share text error to appear")
+        assertShareErrorDisplayed(waitLabel = "missing share text error to appear")
     }
 
     private fun launchShareIntent(sharedText: String? = null, includeTextExtra: Boolean = true) {
@@ -132,8 +132,8 @@ class ShareIntentUiTest : AbstractUiTestCase() {
         }
     }
 
-    private fun assertShareErrorDisplayed(label: String) {
-        waitUntil(label = label) {
+    private fun assertShareErrorDisplayed(waitLabel: String) {
+        waitUntil(label = waitLabel) {
             onView(withText(SHARE_ERROR_MESSAGE)).check(matches(isDisplayed()))
         }
     }
