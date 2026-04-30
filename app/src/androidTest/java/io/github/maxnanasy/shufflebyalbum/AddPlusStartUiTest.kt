@@ -9,14 +9,11 @@ import androidx.test.espresso.assertion.ViewAssertions.matches
 import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
 import androidx.test.espresso.matcher.ViewMatchers.withId
 import androidx.test.espresso.matcher.ViewMatchers.withText
-import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.spotify.protocol.types.Repeat
 import okhttp3.mockwebserver.MockResponse
 import org.hamcrest.Matchers.startsWith
-import org.junit.Test
-import org.junit.runner.RunWith
+import org.junit.jupiter.api.Test
 
-@RunWith(AndroidJUnit4::class)
 class AddPlusStartUiTest : AbstractUiTestCase() {
     @Test
     fun addsAlbum() {
@@ -117,5 +114,4 @@ class AddPlusStartUiTest : AbstractUiTestCase() {
             onView(withText("Error importing albums: 500 boom")).check(matches(isDisplayed()))
         }
     }
-
 }

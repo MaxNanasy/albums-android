@@ -21,20 +21,20 @@ import okhttp3.mockwebserver.MockWebServer
 import okhttp3.mockwebserver.RecordedRequest
 import org.json.JSONArray
 import org.json.JSONObject
-import org.junit.After
-import org.junit.Before
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.BeforeEach
 
 abstract class AbstractUiTestCase {
     protected lateinit var harness: UiTestHarness
     private var scenario: ActivityScenario<MainActivity>? = null
 
-    @Before
+    @BeforeEach
     fun setUpUiTestHarness() {
         harness = UiTestHarness()
         harness.start()
     }
 
-    @After
+    @AfterEach
     fun tearDownUiTestHarness() {
         scenario?.close()
         scenario = null

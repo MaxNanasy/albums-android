@@ -9,22 +9,19 @@ import androidx.test.espresso.Espresso.onView
 import androidx.test.espresso.assertion.ViewAssertions.matches
 import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
 import androidx.test.espresso.matcher.ViewMatchers.withText
-import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import okhttp3.mockwebserver.MockResponse
-import org.junit.After
-import org.junit.Before
-import org.junit.Test
-import org.junit.runner.RunWith
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Test
 
-@RunWith(AndroidJUnit4::class)
 class ShareIntentUiTest : AbstractUiTestCase() {
     private lateinit var instrumentation: Instrumentation
     private lateinit var targetContext: Context
     private lateinit var shareIntentMonitor: Instrumentation.ActivityMonitor
     private var launchedActivity: Activity? = null
 
-    @Before
+    @BeforeEach
     fun setUpShareIntentMonitor() {
         instrumentation = InstrumentationRegistry.getInstrumentation()
         targetContext = ApplicationProvider.getApplicationContext()
@@ -32,7 +29,7 @@ class ShareIntentUiTest : AbstractUiTestCase() {
         launchedActivity = null
     }
 
-    @After
+    @AfterEach
     fun tearDownShareIntentMonitor() {
         launchedActivity?.let { activity ->
             instrumentation.runOnMainSync {
