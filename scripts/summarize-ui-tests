@@ -63,12 +63,12 @@ def summarize(xml_path: Path) -> list[str]:
     lines.append('')
 
     for test in failed:
-        qualified_name = (
-            f"{test['classname']}.{test['name']}"
+        full_name = (
+            f"{test['classname']} > {test['name']}"
             if test['classname']
             else test['name']
         )
-        lines.append(f'### `{qualified_name}`')
+        lines.append(f'### `{full_name}`')
         lines.append('')
         lines.append('```text')
         lines.append(test['details'])
