@@ -6,11 +6,14 @@ import androidx.test.espresso.action.ViewActions.scrollTo
 import androidx.test.espresso.matcher.ViewMatchers.withId
 import java.util.concurrent.atomic.AtomicInteger
 import okhttp3.mockwebserver.MockResponse
+import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 
+@DisplayName("Playback Monitor")
 class PlaybackMonitorUiTest : AbstractUiTestCase() {
     @Test
-    fun playbackMonitorRunsOnlyWhenHarnessTriggersIt() {
+    @DisplayName("Monitor polls only when harness triggers it")
+    fun monitorPollsOnlyWhenHarnessTriggersIt() {
         harness.seedConnectedSession()
         harness.seedSavedItems(
             listOf(
