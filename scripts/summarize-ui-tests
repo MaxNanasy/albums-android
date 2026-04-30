@@ -63,9 +63,10 @@ def summarize(xml_path: Path) -> list[str]:
     lines.append('')
 
     for test in failed:
+        base_classname = test['classname'].rsplit('.', 1)[-1] if test['classname'] else ''
         full_name = (
-            f"{test['classname']} > {test['name']}"
-            if test['classname']
+            f"{base_classname} > {test['name']}"
+            if base_classname
             else test['name']
         )
         lines.append(f'### `{full_name}`')
