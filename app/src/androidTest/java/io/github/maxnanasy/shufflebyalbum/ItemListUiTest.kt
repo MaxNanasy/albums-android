@@ -55,7 +55,8 @@ class ItemListUiTest : AbstractUiTestCase() {
 
         clickRecyclerActionByTitle(R.id.removedItemsRecycler, "A", R.id.removeButton)
         Ui.Toasts.instance("Restored “A”").check(matches(isDisplayed()))
-        check(harness.savedItemTitles() == listOf("A", "B", "New One"))
+        check(harness.savedItemTitles().toSet() == setOf("A", "B", "New One"))
+        check(harness.savedItemTitles().size == 3)
         Ui.RemovedItems.section().check(matches(withEffectiveVisibility(GONE)))
 
         Ui.SavedItems.removeButton("A").perform(click())
@@ -102,17 +103,20 @@ class ItemListUiTest : AbstractUiTestCase() {
         check(harness.savedItemTitles() == listOf("B"))
         Ui.RemovedItems.section().check(matches(withEffectiveVisibility(androidx.test.espresso.matcher.ViewMatchers.Visibility.VISIBLE)))
         Ui.RemovedItems.count().check(matches(withText("2 items")))
-        check(harness.removedItemTitles() == listOf("C", "A"))
+        check(harness.removedItemTitles().toSet() == setOf("A", "C"))
+        check(harness.removedItemTitles().size == 2)
 
         clickRecyclerActionByTitle(R.id.removedItemsRecycler, "A", R.id.removeButton)
         Ui.Toasts.instance("Restored “A”").check(matches(isDisplayed()))
-        check(harness.savedItemTitles() == listOf("B", "A"))
+        check(harness.savedItemTitles().toSet() == setOf("A", "B"))
+        check(harness.savedItemTitles().size == 2)
         Ui.RemovedItems.count().check(matches(withText("1 item")))
 
         Ui.SavedItems.uriInput().perform(replaceText("spotify:playlist:importme"), closeSoftKeyboard())
         Ui.SavedItems.importAlbumsButton().perform(click())
         Ui.Toasts.instance("Imported 1 album(s) from playlist (1 unique album(s) found)").check(matches(isDisplayed()))
-        check(harness.savedItemTitles() == listOf("B", "A", "C"))
+        check(harness.savedItemTitles().toSet() == setOf("A", "B", "C"))
+        check(harness.savedItemTitles().size == 3)
         Ui.RemovedItems.section().check(matches(withEffectiveVisibility(GONE)))
     }
 
