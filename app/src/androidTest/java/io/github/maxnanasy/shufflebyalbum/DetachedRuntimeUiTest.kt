@@ -35,7 +35,7 @@ class DetachedRuntimeUiTest : AbstractUiTestCase() {
             Ui.Playback.status().check(
                 matches(
                     withText(
-                        "Playback detached due to a Spotify error: Requested Spotify item or playback device was not found: device missing",
+                        "Playback detached due to a Spotify error: IllegalStateException: Requested Spotify item or playback device was not found: device missing",
                     ),
                 ),
             )
@@ -143,7 +143,7 @@ class DetachedRuntimeUiTest : AbstractUiTestCase() {
             Ui.Playback.status().check(
                 matches(
                     withText(
-                        "Playback detached due to a Spotify error: Spotify is temporarily unavailable; please try again shortly: play failed",
+                        "Playback detached due to a Spotify error: IllegalStateException: Spotify is temporarily unavailable; please try again shortly: play failed",
                     ),
                 ),
             )

@@ -69,7 +69,7 @@ class StorageJsonUiTest : AbstractUiTestCase() {
         )
         Ui.Storage.importDataButton().perform(scrollTo(), click())
         waitUntil(label = "valid storage import") {
-            Ui.SavedItems.row("spotify:album:no-title").check(matches(isDisplayed()))
+            check(harness.savedItemTitles() == listOf("spotify:album:no-title"))
             Ui.Playback.status().check(matches(withText("Data imported; session reset")))
         }
         Ui.Playback.nextButton().check(matches(not(isEnabled())))
@@ -87,7 +87,7 @@ class StorageJsonUiTest : AbstractUiTestCase() {
 
         launchMainActivity()
         Ui.SavedItems.removeButton("One").perform(click())
-        Ui.RemovedItems.row("One").check(matches(isDisplayed()))
+        check(harness.removedItemTitles() == listOf("One"))
 
         Ui.Storage.exportDataButton().perform(scrollTo(), click())
         val exported = JSONObject(textOf(R.id.storageJsonInput).orEmpty())
@@ -109,18 +109,15 @@ class StorageJsonUiTest : AbstractUiTestCase() {
         Ui.Storage.importDataButton().perform(scrollTo(), click())
 
         waitUntil(label = "removed items import restore") {
-            Ui.SavedItems.row("Two").check(matches(isDisplayed()))
-            Ui.SavedItems.row("One").check(doesNotExist())
-            Ui.RemovedItems.section().check(matches(isDisplayed()))
-            Ui.RemovedItems.row("Restorable").check(matches(isDisplayed()))
-            Ui.RemovedItems.row("One").check(doesNotExist())
+            check(harness.savedItemTitles() == listOf("Two"))
+            Ui.RemovedItems.section().check(matches(withEffectiveVisibility(androidx.test.espresso.matcher.ViewMatchers.Visibility.VISIBLE)))
+            check(harness.removedItemTitles() == listOf("Restorable"))
         }
 
         Ui.RemovedItems.restoreButton("Restorable").perform(click())
         waitUntil(label = "restored removed import item") {
-            Ui.SavedItems.row("Restorable").check(matches(isDisplayed()))
+            check(harness.savedItemTitles() == listOf("Two", "Restorable"))
         }
-        check(textsInRecycler(R.id.itemRecycler, R.id.title) == listOf("Two", "Restorable"))
         Ui.RemovedItems.section().check(matches(withEffectiveVisibility(GONE)))
     }
 

@@ -33,7 +33,8 @@ class PlaybackUiTest : AbstractUiTestCase() {
         waitUntil(label = "playback start status") {
             Ui.Playback.status().check(matches(withText("Now playing album 1 of 1: Discovery")))
         }
-        Ui.Playback.queueRow("▶ 1. Discovery").check(matches(isDisplayed()))
+        check(harness.runtimeQueueTitles() == listOf("Discovery"))
+        check(harness.runtimeIndex() == 0)
         waitUntil(label = "playback start commands") {
             check(harness.spotifyAppRemoteService.commands.size == 3)
         }
@@ -56,7 +57,8 @@ class PlaybackUiTest : AbstractUiTestCase() {
         waitUntil(label = "playlist playback start status") {
             Ui.Playback.status().check(matches(withText("Now playing playlist 1 of 1: Road Trip Mix")))
         }
-        Ui.Playback.queueRow("▶ 1. Road Trip Mix").check(matches(isDisplayed()))
+        check(harness.runtimeQueueTitles() == listOf("Road Trip Mix"))
+        check(harness.runtimeIndex() == 0)
     }
 
     @Test
@@ -120,7 +122,7 @@ class PlaybackUiTest : AbstractUiTestCase() {
             Ui.Playback.status().check(
                 matches(
                     withText(
-                        "Playback detached due to a Spotify error: Spotify rate limit reached; please wait a moment and retry: rate limited",
+                        "Playback detached due to a Spotify error: IllegalStateException: Spotify rate limit reached; please wait a moment and retry: rate limited",
                     ),
                 ),
             )

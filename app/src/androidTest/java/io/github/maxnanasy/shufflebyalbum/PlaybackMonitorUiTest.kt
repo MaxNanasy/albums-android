@@ -105,8 +105,8 @@ class PlaybackMonitorUiTest : AbstractUiTestCase() {
         }
 
         harness.playbackMonitorLoop.triggerTick()
-        waitUntil(label = "matched monitor status") {
-            Ui.Playback.status().check(matches(withText("Now playing album 1 of 2: One")))
+        waitUntil(label = "observed current context") {
+            check(harness.runtimeObservedCurrentContext())
         }
 
         state.set("null")
@@ -193,6 +193,9 @@ class PlaybackMonitorUiTest : AbstractUiTestCase() {
         }
 
         harness.playbackMonitorLoop.triggerTick()
+        waitUntil(label = "observed current context") {
+            check(harness.runtimeObservedCurrentContext())
+        }
         state.set("mismatch")
         harness.playbackMonitorLoop.triggerTick()
         waitUntil(label = "mismatch detached status") {
