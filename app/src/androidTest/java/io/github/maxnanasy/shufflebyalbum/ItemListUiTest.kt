@@ -108,7 +108,7 @@ class ItemListUiTest : AbstractUiTestCase() {
         Ui.RemovedItems.count().check(matches(withText("2 items")))
         check(harness.removedItemTitles() == listOf("C", "A"))
 
-        Ui.RemovedItems.restoreButton("A").perform(click())
+        clickRecyclerActionByTitle(R.id.removedItemsRecycler, "A", R.id.removeButton)
         Ui.Toasts.instance("Restored “A”").check(matches(isDisplayed()))
         check(harness.savedItemTitles() == listOf("B", "A"))
         Ui.RemovedItems.count().check(matches(withText("1 item")))

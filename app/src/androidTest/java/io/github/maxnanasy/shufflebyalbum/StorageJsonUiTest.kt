@@ -114,7 +114,7 @@ class StorageJsonUiTest : AbstractUiTestCase() {
             check(harness.removedItemTitles() == listOf("Restorable"))
         }
 
-        Ui.RemovedItems.restoreButton("Restorable").perform(click())
+        clickRecyclerActionByTitle(R.id.removedItemsRecycler, "Restorable", R.id.removeButton)
         waitUntil(label = "restored removed import item") {
             check(harness.savedItemTitles() == listOf("Two", "Restorable"))
         }
