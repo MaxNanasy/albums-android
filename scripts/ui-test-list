@@ -72,6 +72,10 @@ def ref_file_at(ref: str, path: str) -> str | None:
 
 
 def skip_string(text: str, index: int) -> int:
+    if text.startswith('\"\"\"', index):
+        end = text.find('\"\"\"', index + 3)
+        return len(text) if end == -1 else end + 3
+
     quote = text[index]
     index += 1
     while index < len(text):
@@ -146,6 +150,10 @@ def read_string_literal(text: str, index: int, limit: int | None = None) -> tupl
     index = skip_space_and_comments(text, index, limit)
     if index >= limit or text[index] not in ('"', "'"):
         return None, index
+
+    if text.startswith('\"\"\"', index):
+        end = text.find('\"\"\"', index + 3, limit)
+        return (None, limit) if end == -1 else (text[index + 3:end], end + 3)
 
     quote = text[index]
     index += 1
