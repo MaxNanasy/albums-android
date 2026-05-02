@@ -44,37 +44,49 @@ class ItemListUiTest : AbstractUiTestCase() {
         launchMainActivity()
         clickRecyclerActionByTitle(R.id.itemRecycler, "A", R.id.removeButton)
         waitUntil(label = "first removal state") {
-            check(harness.savedItemTitles() == listOf("B"))
+            check(visibleSavedItemTitles() == listOf("B"))
             Ui.RemovedItems.section().check(matches(withEffectiveVisibility(androidx.test.espresso.matcher.ViewMatchers.Visibility.VISIBLE)))
-            check(harness.removedItemTitles() == listOf("A"))
+            Ui.RemovedItems.row("A").check(matches(isDisplayed()))
             Ui.RemovedItems.count().check(matches(withText("1 item")))
+            Ui.Toasts.instance("Removed “A”").check(matches(isDisplayed()))
+            Ui.Toasts.undoButton().check(matches(isDisplayed()))
         }
 
         Ui.SavedItems.uriInput().perform(replaceText("spotify:album:newone"), closeSoftKeyboard())
         Ui.SavedItems.addButton().perform(click())
-        waitUntil(label = "new item added after first removal") {
-            Ui.Toasts.instance("Added “New One”").check(matches(isDisplayed()))
-            check(harness.savedItemTitles() == listOf("B", "New One"))
+        waitUntil(label = "new item appended while undo remains available") {
+            check(visibleSavedItemTitles() == listOf("B", "New One"))
+            Ui.RemovedItems.row("A").check(matches(isDisplayed()))
+            Ui.Toasts.undoButton().check(matches(isDisplayed()))
         }
 
-        clickRecyclerActionByTitle(R.id.removedItemsRecycler, "A", R.id.removeButton)
-        waitUntil(label = "removed item restored") {
+        Ui.Toasts.undoButton().perform(click())
+        waitUntil(label = "undo restored original row position") {
             Ui.Toasts.instance("Restored “A”").check(matches(isDisplayed()))
-            check(harness.savedItemTitles().toSet() == setOf("A", "B", "New One"))
-            check(harness.savedItemTitles().size == 3)
+            check(visibleSavedItemTitles() == listOf("A", "B", "New One"))
             Ui.RemovedItems.section().check(matches(withEffectiveVisibility(GONE)))
         }
 
         clickRecyclerActionByTitle(R.id.itemRecycler, "A", R.id.removeButton)
         waitUntil(label = "second removal state") {
-            check(harness.removedItemTitles() == listOf("A"))
+            check(visibleSavedItemTitles() == listOf("B", "New One"))
+            Ui.RemovedItems.row("A").check(matches(isDisplayed()))
+            Ui.Toasts.instance("Removed “A”").check(matches(isDisplayed()))
+            Ui.Toasts.undoButton().check(matches(isDisplayed()))
         }
 
         Ui.SavedItems.uriInput().perform(replaceText("spotify:album:a"), closeSoftKeyboard())
         Ui.SavedItems.addButton().perform(click())
-        waitUntil(label = "re-added item appended to saved list") {
-            Ui.Toasts.instance("Added “A”").check(matches(isDisplayed()))
-            check(harness.savedItemTitles() == listOf("B", "New One", "A"))
+        waitUntil(label = "re-added item appended while undo remains available") {
+            check(visibleSavedItemTitles() == listOf("B", "New One", "A"))
+            Ui.RemovedItems.section().check(matches(withEffectiveVisibility(GONE)))
+            Ui.Toasts.undoButton().check(matches(isDisplayed()))
+        }
+
+        Ui.Toasts.undoButton().perform(click())
+        waitUntil(label = "duplicate undo prevented") {
+            Ui.Toasts.instance("Item is already in your list").check(matches(isDisplayed()))
+            check(visibleSavedItemTitles() == listOf("B", "New One", "A"))
             Ui.RemovedItems.section().check(matches(withEffectiveVisibility(GONE)))
         }
     }
@@ -170,5 +182,9 @@ class ItemListUiTest : AbstractUiTestCase() {
 
         launchMainActivity()
         Ui.RemovedItems.section().check(matches(withEffectiveVisibility(GONE)))
+    }
+
+    private fun visibleSavedItemTitles(): List<String> {
+        return textsInRecycler(R.id.itemRecycler, R.id.title)
     }
 }
