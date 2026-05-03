@@ -33,6 +33,9 @@ class PlaybackUiTest : AbstractUiTestCase() {
         waitUntil(label = "playback start status") {
             Ui.Playback.status().check(matches(withText("Now playing album 1 of 1: Discovery")))
         }
+        waitUntil(label = "playback queue row") {
+            Ui.Playback.queueRow("▶ 1. Discovery").check(matches(isDisplayed()))
+        }
         check(harness.runtimeQueueTitles() == listOf("Discovery"))
         check(harness.runtimeIndex() == 0)
         waitUntil(label = "playback start commands") {
@@ -56,6 +59,9 @@ class PlaybackUiTest : AbstractUiTestCase() {
 
         waitUntil(label = "playlist playback start status") {
             Ui.Playback.status().check(matches(withText("Now playing playlist 1 of 1: Road Trip Mix")))
+        }
+        waitUntil(label = "playlist playback queue row") {
+            Ui.Playback.queueRow("▶ 1. Road Trip Mix").check(matches(isDisplayed()))
         }
         check(harness.runtimeQueueTitles() == listOf("Road Trip Mix"))
         check(harness.runtimeIndex() == 0)
@@ -87,12 +93,18 @@ class PlaybackUiTest : AbstractUiTestCase() {
         waitUntil(label = "active playback controls") {
             Ui.Playback.nextButton().check(matches(isEnabled()))
         }
+        waitUntil(label = "first queue item") {
+            Ui.Playback.queueRow("▶ 1. One").check(matches(isDisplayed()))
+        }
         Ui.Playback.startButton().check(matches(not(isEnabled())))
         Ui.Playback.stopButton().check(matches(isEnabled()))
 
         Ui.Playback.nextButton().perform(scrollTo(), click())
         waitUntil(label = "second queue item") {
             Ui.Playback.status().check(matches(withText("Now playing album 2 of 2: Two")))
+        }
+        waitUntil(label = "second queue row") {
+            Ui.Playback.queueRow("▶ 2. Two").check(matches(isDisplayed()))
         }
 
         Ui.Playback.nextButton().perform(scrollTo(), click())
