@@ -46,7 +46,7 @@ class ItemListUiTest : AbstractUiTestCase() {
         waitUntil(label = "first removal state") {
             check(visibleSavedItemTitles() == listOf("B"))
             Ui.RemovedItems.section().check(matches(withEffectiveVisibility(androidx.test.espresso.matcher.ViewMatchers.Visibility.VISIBLE)))
-            Ui.RemovedItems.row("A").check(matches(isDisplayed()))
+            check(harness.removedItemTitles() == listOf("A"))
             Ui.RemovedItems.count().check(matches(withText("1 item")))
             Ui.Toasts.instance("Removed “A”").check(matches(isDisplayed()))
             Ui.Toasts.undoButton().check(matches(isDisplayed()))
@@ -56,7 +56,7 @@ class ItemListUiTest : AbstractUiTestCase() {
         Ui.SavedItems.addButton().perform(click())
         waitUntil(label = "new item appended while undo remains available") {
             check(visibleSavedItemTitles() == listOf("B", "New One"))
-            Ui.RemovedItems.row("A").check(matches(isDisplayed()))
+            check(harness.removedItemTitles() == listOf("A"))
             Ui.Toasts.undoButton().check(matches(isDisplayed()))
         }
 
@@ -70,7 +70,7 @@ class ItemListUiTest : AbstractUiTestCase() {
         clickRecyclerActionByTitle(R.id.itemRecycler, "A", R.id.removeButton)
         waitUntil(label = "second removal state") {
             check(visibleSavedItemTitles() == listOf("B", "New One"))
-            Ui.RemovedItems.row("A").check(matches(isDisplayed()))
+            check(harness.removedItemTitles() == listOf("A"))
             Ui.Toasts.instance("Removed “A”").check(matches(isDisplayed()))
             Ui.Toasts.undoButton().check(matches(isDisplayed()))
         }
