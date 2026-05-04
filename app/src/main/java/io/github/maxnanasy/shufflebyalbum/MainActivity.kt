@@ -83,6 +83,7 @@ class MainActivity : AppCompatActivity() {
     private var connectingAppRemote = false
 
     private var undoSnackbar: Snackbar? = null
+    private var standardSnackbar: Snackbar? = null
     private val playbackMonitorLoop by lazy { playbackMonitorLoopFactory() }
     private val spotifyAuthLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -823,7 +824,7 @@ class MainActivity : AppCompatActivity() {
         val snackbar = Snackbar.make(
             findViewById(android.R.id.content),
             "Removed ${quotedTitle(item.title)}",
-            Snackbar.LENGTH_LONG,
+            snackbarDurationOverride ?: Snackbar.LENGTH_LONG,
         )
         snackbar.setAction("Undo") {
             restoreRemovedItemAtIndex(item, removedIndex)
@@ -1478,7 +1479,25 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun snackbar(message: String, duration: Int = Snackbar.LENGTH_SHORT) {
-        Snackbar.make(findViewById(android.R.id.content), message, duration).show()
+        val snackbar = Snackbar.make(
+            findViewById(android.R.id.content),
+            message,
+            snackbarDurationOverride ?: duration,
+        )
+        if (snackbarDurationOverride != null) {
+            standardSnackbar?.dismiss()
+            standardSnackbar = snackbar
+            snackbar.addCallback(
+                object : Snackbar.Callback() {
+                    override fun onDismissed(transientBottomBar: Snackbar?, event: Int) {
+                        if (standardSnackbar === transientBottomBar) {
+                            standardSnackbar = null
+                        }
+                    }
+                },
+            )
+        }
+        snackbar.show()
     }
 
     private fun reportError(
@@ -1561,6 +1580,7 @@ class MainActivity : AppCompatActivity() {
         internal var playbackMonitorLoopFactory: () -> PlaybackMonitorLoop = defaultPlaybackMonitorLoopFactory
         internal var authorizationLaunchInterceptor: ((AuthorizationLaunchAttempt) -> Unit)? = null
         internal var shuffleOverride: ((List<ShuffleItem>) -> MutableList<ShuffleItem>)? = null
+        internal var snackbarDurationOverride: Int? = null
 
         private val SCOPES = listOf(
             "user-modify-playback-state",

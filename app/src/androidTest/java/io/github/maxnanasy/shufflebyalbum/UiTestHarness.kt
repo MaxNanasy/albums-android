@@ -205,6 +205,8 @@ class UiTestHarness : AutoCloseable {
         MainActivity.spotifyApiBaseUrl = server.url("/v1").toString()
         MainActivity.spotifyAppRemoteService = spotifyAppRemoteService
         MainActivity.playbackMonitorLoopFactory = { playbackMonitorLoop }
+        MainActivity.snackbarDurationOverride =
+            com.google.android.material.snackbar.Snackbar.LENGTH_INDEFINITE
         MainActivity.authorizationLaunchInterceptor = { attempt ->
             authorizationLaunchAttempts += attempt
         }
@@ -353,6 +355,7 @@ class UiTestHarness : AutoCloseable {
         MainActivity.playbackMonitorLoopFactory = MainActivity.defaultPlaybackMonitorLoopFactory
         MainActivity.authorizationLaunchInterceptor = null
         MainActivity.shuffleOverride = null
+        MainActivity.snackbarDurationOverride = null
     }
 
     override fun close() {
