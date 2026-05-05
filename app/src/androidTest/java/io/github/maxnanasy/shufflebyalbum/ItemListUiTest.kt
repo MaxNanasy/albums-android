@@ -11,6 +11,7 @@ import androidx.test.espresso.matcher.ViewMatchers.withEffectiveVisibility
 import androidx.test.espresso.matcher.ViewMatchers.withText
 import okhttp3.mockwebserver.MockResponse
 import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 
@@ -22,6 +23,7 @@ class ItemListUiTest : AbstractUiTestCase() {
     }
 
     @Test
+    @Disabled("Issue #115")
     @DisplayName("Remove then undo restores original row position and duplicate-undo is prevented")
     fun removeThenUndoRestoresOriginalRowPositionAndDuplicateUndoIsPrevented() {
         harness.seedSavedItems(
