@@ -48,7 +48,7 @@ class ItemListUiTest : AbstractUiTestCase() {
         waitUntil(label = "first removal state") {
             check(visibleSavedItemTitles() == listOf("B"))
             Ui.RemovedItems.section().check(matches(withEffectiveVisibility(androidx.test.espresso.matcher.ViewMatchers.Visibility.VISIBLE)))
-            check(harness.removedItemTitles() == listOf("A"))
+            check(visibleRemovedItemTitles() == listOf("A"))
             Ui.RemovedItems.count().check(matches(withText("1 item")))
             Ui.Toasts.instance("Removed “A”").check(matches(isDisplayed()))
             Ui.Toasts.undoButton().check(matches(isDisplayed()))
@@ -58,7 +58,7 @@ class ItemListUiTest : AbstractUiTestCase() {
         Ui.SavedItems.addButton().perform(click())
         waitUntil(label = "new item appended while undo remains available") {
             check(visibleSavedItemTitles() == listOf("B", "New One"))
-            check(harness.removedItemTitles() == listOf("A"))
+            check(visibleRemovedItemTitles() == listOf("A"))
             Ui.Toasts.undoButton().check(matches(isDisplayed()))
         }
 
@@ -72,7 +72,7 @@ class ItemListUiTest : AbstractUiTestCase() {
         clickRecyclerActionByTitle(R.id.itemRecycler, "A", R.id.removeButton)
         waitUntil(label = "second removal state") {
             check(visibleSavedItemTitles() == listOf("B", "New One"))
-            check(harness.removedItemTitles() == listOf("A"))
+            check(visibleRemovedItemTitles() == listOf("A"))
             Ui.Toasts.instance("Removed “A”").check(matches(isDisplayed()))
             Ui.Toasts.undoButton().check(matches(isDisplayed()))
         }
@@ -125,16 +125,16 @@ class ItemListUiTest : AbstractUiTestCase() {
         clickRecyclerActionByTitle(R.id.itemRecycler, "A", R.id.removeButton)
         clickRecyclerActionByTitle(R.id.itemRecycler, "C", R.id.removeButton)
         waitUntil(label = "two removed items state") {
-            check(harness.savedItemTitles() == listOf("B"))
+            check(visibleSavedItemTitles() == listOf("B"))
             Ui.RemovedItems.section().check(matches(withEffectiveVisibility(androidx.test.espresso.matcher.ViewMatchers.Visibility.VISIBLE)))
             Ui.RemovedItems.count().check(matches(withText("2 items")))
-            check(harness.removedItemTitles() == listOf("C", "A"))
+            check(visibleRemovedItemTitles() == listOf("C", "A"))
         }
 
         clickRecyclerActionByTitle(R.id.removedItemsRecycler, "A", R.id.removeButton)
         waitUntil(label = "single removed item restored") {
             Ui.Toasts.instance("Restored “A”").check(matches(isDisplayed()))
-            check(harness.savedItemTitles() == listOf("B", "A"))
+            check(visibleSavedItemTitles() == listOf("B", "A"))
             Ui.RemovedItems.count().check(matches(withText("1 item")))
         }
 
@@ -142,7 +142,7 @@ class ItemListUiTest : AbstractUiTestCase() {
         Ui.SavedItems.importAlbumsButton().perform(click())
         waitUntil(label = "playlist import clears matching removed uri") {
             Ui.Toasts.instance("Imported 1 album(s) from playlist (1 unique album(s) found)").check(matches(isDisplayed()))
-            check(harness.savedItemTitles() == listOf("B", "A", "C"))
+            check(visibleSavedItemTitles() == listOf("B", "A", "C"))
             Ui.RemovedItems.section().check(matches(withEffectiveVisibility(GONE)))
         }
     }
@@ -160,19 +160,19 @@ class ItemListUiTest : AbstractUiTestCase() {
         launchMainActivity()
         clickRecyclerActionByTitle(R.id.itemRecycler, "A", R.id.removeButton)
         waitUntil(label = "persisted removed item") {
-            check(harness.removedItemTitles() == listOf("A"))
+            check(visibleRemovedItemTitles() == listOf("A"))
         }
 
         launchMainActivity()
         Ui.RemovedItems.section().check(matches(withEffectiveVisibility(androidx.test.espresso.matcher.ViewMatchers.Visibility.VISIBLE)))
         Ui.RemovedItems.count().check(matches(withText("1 item")))
-        check(harness.removedItemTitles() == listOf("A"))
+        check(visibleRemovedItemTitles() == listOf("A"))
 
         Ui.RemovedItems.purgeButton().perform(scrollTo(), click())
         Ui.RemovedItems.purgeDialogMessage().check(matches(withText("Permanently remove 1 item?")))
         Ui.RemovedItems.cancelPurgeButton().perform(click())
         Ui.RemovedItems.section().check(matches(withEffectiveVisibility(androidx.test.espresso.matcher.ViewMatchers.Visibility.VISIBLE)))
-        check(harness.removedItemTitles() == listOf("A"))
+        check(visibleRemovedItemTitles() == listOf("A"))
 
         Ui.RemovedItems.purgeButton().perform(scrollTo(), click())
         Ui.RemovedItems.confirmPurgeButton().perform(click())
@@ -185,5 +185,9 @@ class ItemListUiTest : AbstractUiTestCase() {
 
     private fun visibleSavedItemTitles(): List<String> {
         return textsInRecycler(R.id.itemRecycler, R.id.title)
+    }
+
+    private fun visibleRemovedItemTitles(): List<String> {
+        return textsInRecycler(R.id.removedItemsRecycler, R.id.title)
     }
 }

@@ -36,8 +36,8 @@ class PlaybackUiTest : AbstractUiTestCase() {
         waitUntil(label = "playback queue row") {
             Ui.Playback.queueRow("▶ 1. Discovery").check(matches(withText("▶ 1. Discovery")))
         }
-        check(harness.runtimeQueueTitles() == listOf("Discovery"))
-        check(harness.runtimeIndex() == 0)
+        Ui.Playback.startButton().check(matches(not(isEnabled())))
+        Ui.Playback.stopButton().check(matches(isEnabled()))
         waitUntil(label = "playback start commands") {
             check(harness.spotifyAppRemoteService.commands.size == 3)
         }
@@ -63,8 +63,8 @@ class PlaybackUiTest : AbstractUiTestCase() {
         waitUntil(label = "playlist playback queue row") {
             Ui.Playback.queueRow("▶ 1. Road Trip Mix").check(matches(withText("▶ 1. Road Trip Mix")))
         }
-        check(harness.runtimeQueueTitles() == listOf("Road Trip Mix"))
-        check(harness.runtimeIndex() == 0)
+        Ui.Playback.startButton().check(matches(not(isEnabled())))
+        Ui.Playback.stopButton().check(matches(isEnabled()))
     }
 
     @Test
