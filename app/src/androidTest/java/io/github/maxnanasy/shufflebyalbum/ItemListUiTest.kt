@@ -1,0 +1,192 @@
+package io.github.maxnanasy.shufflebyalbum
+
+import androidx.test.espresso.action.ViewActions.click
+import androidx.test.espresso.action.ViewActions.closeSoftKeyboard
+import androidx.test.espresso.action.ViewActions.replaceText
+import androidx.test.espresso.action.ViewActions.scrollTo
+import androidx.test.espresso.assertion.ViewAssertions.matches
+import androidx.test.espresso.matcher.ViewMatchers.Visibility.GONE
+import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
+import androidx.test.espresso.matcher.ViewMatchers.withEffectiveVisibility
+import androidx.test.espresso.matcher.ViewMatchers.withText
+import okhttp3.mockwebserver.MockResponse
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Disabled
+import org.junit.jupiter.api.DisplayName
+import org.junit.jupiter.api.Test
+
+@DisplayName("Item List")
+class ItemListUiTest : AbstractUiTestCase() {
+    @BeforeEach
+    fun seedConnectedAuth() {
+        harness.seedConnectedSession()
+    }
+
+    @Test
+    @Disabled("Issue #115")
+    @DisplayName("Remove then undo restores original row position and duplicate-undo is prevented")
+    fun removeThenUndoRestoresOriginalRowPositionAndDuplicateUndoIsPrevented() {
+        harness.seedSavedItems(
+            listOf(
+                ShuffleItem(type = "album", uri = "spotify:album:a", title = "A"),
+                ShuffleItem(type = "album", uri = "spotify:album:b", title = "B"),
+            ),
+        )
+        harness.setDispatcher(
+            jsonDispatcher {
+                route("/v1/albums/newone") {
+                    MockResponse().setResponseCode(200).setHeader("Content-Type", "application/json").setBody("""{"name":"New One"}""")
+                }
+                route("/v1/albums/a") {
+                    MockResponse().setResponseCode(200).setHeader("Content-Type", "application/json").setBody("""{"name":"A"}""")
+                }
+            },
+        )
+
+        launchMainActivity()
+        clickRecyclerActionByTitle(R.id.itemRecycler, "A", R.id.removeButton)
+        waitUntil(label = "first removal state") {
+            check(visibleSavedItemTitles() == listOf("B"))
+            Ui.RemovedItems.section().check(matches(withEffectiveVisibility(androidx.test.espresso.matcher.ViewMatchers.Visibility.VISIBLE)))
+            check(harness.removedItemTitles() == listOf("A"))
+            Ui.RemovedItems.count().check(matches(withText("1 item")))
+            Ui.Toasts.instance("Removed “A”").check(matches(isDisplayed()))
+            Ui.Toasts.undoButton().check(matches(isDisplayed()))
+        }
+
+        Ui.SavedItems.uriInput().perform(replaceText("spotify:album:newone"), closeSoftKeyboard())
+        Ui.SavedItems.addButton().perform(click())
+        waitUntil(label = "new item appended while undo remains available") {
+            check(visibleSavedItemTitles() == listOf("B", "New One"))
+            check(harness.removedItemTitles() == listOf("A"))
+            Ui.Toasts.undoButton().check(matches(isDisplayed()))
+        }
+
+        Ui.Toasts.undoButton().perform(click())
+        waitUntil(label = "undo restored original row position") {
+            Ui.Toasts.instance("Restored “A”").check(matches(isDisplayed()))
+            check(visibleSavedItemTitles() == listOf("A", "B", "New One"))
+            Ui.RemovedItems.section().check(matches(withEffectiveVisibility(GONE)))
+        }
+
+        clickRecyclerActionByTitle(R.id.itemRecycler, "A", R.id.removeButton)
+        waitUntil(label = "second removal state") {
+            check(visibleSavedItemTitles() == listOf("B", "New One"))
+            check(harness.removedItemTitles() == listOf("A"))
+            Ui.Toasts.instance("Removed “A”").check(matches(isDisplayed()))
+            Ui.Toasts.undoButton().check(matches(isDisplayed()))
+        }
+
+        Ui.SavedItems.uriInput().perform(replaceText("spotify:album:a"), closeSoftKeyboard())
+        Ui.SavedItems.addButton().perform(click())
+        waitUntil(label = "re-added item appended while undo remains available") {
+            check(visibleSavedItemTitles() == listOf("B", "New One", "A"))
+            Ui.RemovedItems.section().check(matches(withEffectiveVisibility(GONE)))
+            Ui.Toasts.undoButton().check(matches(isDisplayed()))
+        }
+
+        Ui.Toasts.undoButton().perform(click())
+        waitUntil(label = "duplicate undo prevented") {
+            Ui.Toasts.instance("Item is already in your list").check(matches(isDisplayed()))
+            check(visibleSavedItemTitles() == listOf("B", "New One", "A"))
+            Ui.RemovedItems.section().check(matches(withEffectiveVisibility(GONE)))
+        }
+    }
+
+    @Test
+    @DisplayName("Removed Items restores items to the bottom and import albums clears restored uris")
+    fun removedItemsRestoresItemsToTheBottomAndImportAlbumsClearsRestoredUris() {
+        harness.seedSavedItems(
+            listOf(
+                ShuffleItem(type = "album", uri = "spotify:album:a", title = "A"),
+                ShuffleItem(type = "album", uri = "spotify:album:b", title = "B"),
+                ShuffleItem(type = "album", uri = "spotify:album:c", title = "C"),
+            ),
+        )
+        harness.setDispatcher(
+            jsonDispatcher {
+                route("/v1/playlists/importme/items?limit=50&offset=0&additional_types=track&market=from_token") {
+                    MockResponse()
+                        .setResponseCode(200)
+                        .setHeader("Content-Type", "application/json")
+                        .setBody(
+                            """
+                            {
+                              "items":[{"item":{"album":{"uri":"spotify:album:c","name":"C"}}}],
+                              "next":null
+                            }
+                            """.trimIndent(),
+                        )
+                }
+            },
+        )
+
+        launchMainActivity()
+        clickRecyclerActionByTitle(R.id.itemRecycler, "A", R.id.removeButton)
+        clickRecyclerActionByTitle(R.id.itemRecycler, "C", R.id.removeButton)
+        waitUntil(label = "two removed items state") {
+            check(harness.savedItemTitles() == listOf("B"))
+            Ui.RemovedItems.section().check(matches(withEffectiveVisibility(androidx.test.espresso.matcher.ViewMatchers.Visibility.VISIBLE)))
+            Ui.RemovedItems.count().check(matches(withText("2 items")))
+            check(harness.removedItemTitles().toSet() == setOf("A", "C"))
+            check(harness.removedItemTitles().size == 2)
+        }
+
+        clickRecyclerActionByTitle(R.id.removedItemsRecycler, "A", R.id.removeButton)
+        waitUntil(label = "single removed item restored") {
+            Ui.Toasts.instance("Restored “A”").check(matches(isDisplayed()))
+            check(harness.savedItemTitles().toSet() == setOf("A", "B"))
+            check(harness.savedItemTitles().size == 2)
+            Ui.RemovedItems.count().check(matches(withText("1 item")))
+        }
+
+        Ui.SavedItems.uriInput().perform(replaceText("spotify:playlist:importme"), closeSoftKeyboard())
+        Ui.SavedItems.importAlbumsButton().perform(click())
+        waitUntil(label = "playlist import restores removed uri") {
+            Ui.Toasts.instance("Imported 1 album(s) from playlist (1 unique album(s) found)").check(matches(isDisplayed()))
+            check(harness.savedItemTitles().toSet() == setOf("A", "B", "C"))
+            check(harness.savedItemTitles().size == 3)
+            Ui.RemovedItems.section().check(matches(withEffectiveVisibility(GONE)))
+        }
+    }
+
+    @Test
+    @DisplayName("Removed Items persists across reload and purge all requires confirmation")
+    fun removedItemsPersistsAcrossReloadAndPurgeAllRequiresConfirmation() {
+        harness.seedSavedItems(
+            listOf(
+                ShuffleItem(type = "album", uri = "spotify:album:a", title = "A"),
+                ShuffleItem(type = "album", uri = "spotify:album:b", title = "B"),
+            ),
+        )
+
+        launchMainActivity()
+        clickRecyclerActionByTitle(R.id.itemRecycler, "A", R.id.removeButton)
+        waitUntil(label = "persisted removed item") {
+            check(harness.removedItemTitles() == listOf("A"))
+        }
+
+        launchMainActivity()
+        Ui.RemovedItems.section().check(matches(withEffectiveVisibility(androidx.test.espresso.matcher.ViewMatchers.Visibility.VISIBLE)))
+        Ui.RemovedItems.count().check(matches(withText("1 item")))
+        check(harness.removedItemTitles() == listOf("A"))
+
+        Ui.RemovedItems.purgeButton().perform(scrollTo(), click())
+        Ui.RemovedItems.purgeDialogMessage().check(matches(withText("Permanently remove 1 item?")))
+        Ui.RemovedItems.cancelPurgeButton().perform(click())
+        Ui.RemovedItems.section().check(matches(withEffectiveVisibility(androidx.test.espresso.matcher.ViewMatchers.Visibility.VISIBLE)))
+        check(harness.removedItemTitles() == listOf("A"))
+
+        Ui.RemovedItems.purgeButton().perform(scrollTo(), click())
+        Ui.RemovedItems.confirmPurgeButton().perform(click())
+        Ui.Toasts.instance("Purged Removed Items").check(matches(isDisplayed()))
+        Ui.RemovedItems.section().check(matches(withEffectiveVisibility(GONE)))
+
+        launchMainActivity()
+        Ui.RemovedItems.section().check(matches(withEffectiveVisibility(GONE)))
+    }
+
+    private fun visibleSavedItemTitles(): List<String> {
+        return textsInRecycler(R.id.itemRecycler, R.id.title)
+    }
+}

@@ -5,10 +5,8 @@ import android.app.Instrumentation
 import android.content.Context
 import android.content.Intent
 import androidx.test.core.app.ApplicationProvider
-import androidx.test.espresso.Espresso.onView
 import androidx.test.espresso.assertion.ViewAssertions.matches
 import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
-import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.platform.app.InstrumentationRegistry
 import okhttp3.mockwebserver.MockResponse
 import org.junit.jupiter.api.AfterEach
@@ -61,7 +59,7 @@ class ShareIntentUiTest : AbstractUiTestCase() {
         launchShareIntent(sharedText = "https://open.spotify.com/album/sharedAlbum")
 
         waitUntil(label = "shared album to appear in the list") {
-            onView(withText("Shared Album")).check(matches(isDisplayed()))
+            Ui.SavedItems.row("Shared Album").check(matches(isDisplayed()))
         }
     }
 
@@ -83,7 +81,7 @@ class ShareIntentUiTest : AbstractUiTestCase() {
         launchShareIntent(sharedText = "https://open.spotify.com/playlist/sharedPlaylist?si=test")
 
         waitUntil(label = "shared playlist to appear in the list") {
-            onView(withText("Shared Playlist")).check(matches(isDisplayed()))
+            Ui.SavedItems.row("Shared Playlist").check(matches(isDisplayed()))
         }
     }
 
@@ -134,7 +132,7 @@ class ShareIntentUiTest : AbstractUiTestCase() {
 
     private fun assertShareErrorDisplayed(waitLabel: String) {
         waitUntil(label = waitLabel) {
-            onView(withText(SHARE_ERROR_MESSAGE)).check(matches(isDisplayed()))
+            Ui.Toasts.instance(SHARE_ERROR_MESSAGE).check(matches(isDisplayed()))
         }
     }
 
