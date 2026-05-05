@@ -94,8 +94,8 @@ class ItemListUiTest : AbstractUiTestCase() {
     }
 
     @Test
-    @DisplayName("Removed Items restores items to the bottom and import albums clears restored uris")
-    fun removedItemsRestoresItemsToTheBottomAndImportAlbumsClearsRestoredUris() {
+    @DisplayName("Removed Items restore appends items and playlist import clears matching removed uris")
+    fun removedItemsRestoreAppendsItemsAndPlaylistImportClearsMatchingRemovedUris() {
         harness.seedSavedItems(
             listOf(
                 ShuffleItem(type = "album", uri = "spotify:album:a", title = "A"),
@@ -128,24 +128,21 @@ class ItemListUiTest : AbstractUiTestCase() {
             check(harness.savedItemTitles() == listOf("B"))
             Ui.RemovedItems.section().check(matches(withEffectiveVisibility(androidx.test.espresso.matcher.ViewMatchers.Visibility.VISIBLE)))
             Ui.RemovedItems.count().check(matches(withText("2 items")))
-            check(harness.removedItemTitles().toSet() == setOf("A", "C"))
-            check(harness.removedItemTitles().size == 2)
+            check(harness.removedItemTitles() == listOf("C", "A"))
         }
 
         clickRecyclerActionByTitle(R.id.removedItemsRecycler, "A", R.id.removeButton)
         waitUntil(label = "single removed item restored") {
             Ui.Toasts.instance("Restored “A”").check(matches(isDisplayed()))
-            check(harness.savedItemTitles().toSet() == setOf("A", "B"))
-            check(harness.savedItemTitles().size == 2)
+            check(harness.savedItemTitles() == listOf("B", "A"))
             Ui.RemovedItems.count().check(matches(withText("1 item")))
         }
 
         Ui.SavedItems.uriInput().perform(replaceText("spotify:playlist:importme"), closeSoftKeyboard())
         Ui.SavedItems.importAlbumsButton().perform(click())
-        waitUntil(label = "playlist import restores removed uri") {
+        waitUntil(label = "playlist import clears matching removed uri") {
             Ui.Toasts.instance("Imported 1 album(s) from playlist (1 unique album(s) found)").check(matches(isDisplayed()))
-            check(harness.savedItemTitles().toSet() == setOf("A", "B", "C"))
-            check(harness.savedItemTitles().size == 3)
+            check(harness.savedItemTitles() == listOf("B", "A", "C"))
             Ui.RemovedItems.section().check(matches(withEffectiveVisibility(GONE)))
         }
     }

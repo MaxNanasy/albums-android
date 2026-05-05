@@ -159,17 +159,19 @@ abstract class AbstractUiTestCase {
     ) {
         performOnActivity { activity ->
             val recycler = activity.findViewById<RecyclerView>(recyclerId)
-            var clicked = false
-            repeat(recycler.childCount) { index ->
-                val child = recycler.getChildAt(index)
-                val titleView = child.findViewById<TextView>(R.id.title)
-                if (titleView?.text?.toString() == title) {
-                    child.findViewById<View>(actionViewId)?.performClick()
-                    clicked = true
-                }
-            }
-            check(clicked) { "No recycler action found for $title in $recyclerId" }
+            val actionView = recyclerChildWithTitle(recycler, title)?.findViewById<View>(actionViewId)
+            checkNotNull(actionView) { "No recycler action found for $title in $recyclerId" }
+            actionView.performClick()
         }
+    }
+
+    private fun recyclerChildWithTitle(recycler: RecyclerView, title: String): View? {
+        return (0 until recycler.childCount)
+            .asSequence()
+            .map(recycler::getChildAt)
+            .firstOrNull { child ->
+                child.findViewById<TextView>(R.id.title)?.text?.toString() == title
+            }
     }
 
     private fun collectTexts(view: View, @IdRes textViewId: Int, texts: MutableList<String>) {
