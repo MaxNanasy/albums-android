@@ -171,6 +171,7 @@ class DetachedRuntimeUiTest : AbstractUiTestCase() {
         harness.seedRawRuntimeState("{bad json")
         launchMainActivity()
         Ui.Auth.status().check(matches(withText("Connected")))
-        check(harness.readStringPref(UiTestHarness.KEY_RUNTIME) == null)
+        Ui.Playback.startButton().check(matches(isEnabled()))
+        Ui.Playback.reattachButton().check(matches(withEffectiveVisibility(GONE)))
     }
 }

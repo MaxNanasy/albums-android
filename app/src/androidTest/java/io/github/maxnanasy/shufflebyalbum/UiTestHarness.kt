@@ -294,57 +294,6 @@ class UiTestHarness : AutoCloseable {
         MainActivity.shuffleOverride = { items -> items.toMutableList() }
     }
 
-    fun readStringPref(key: String): String? {
-        return prefs.getString(key, null)
-    }
-
-    fun readLongPref(key: String): Long {
-        return prefs.getLong(key, Long.MIN_VALUE)
-    }
-
-    fun savedItemTitles(): List<String> {
-        return readTitlesFromPref(KEY_ITEMS)
-    }
-
-    fun removedItemTitles(): List<String> {
-        return readTitlesFromPref(KEY_REMOVED_ITEMS)
-    }
-
-    fun runtimeQueueTitles(): List<String> {
-        val raw = prefs.getString(KEY_RUNTIME, null) ?: return emptyList()
-        return try {
-            val queue = JSONObject(raw).optJSONArray("queue") ?: JSONArray()
-            buildList {
-                for (index in 0 until queue.length()) {
-                    val item = queue.optJSONObject(index) ?: continue
-                    val title = item.optString("title")
-                    val uri = item.optString("uri")
-                    add(if (title.isNotBlank()) title else uri)
-                }
-            }
-        } catch (_: Exception) {
-            emptyList()
-        }
-    }
-
-    fun runtimeIndex(): Int? {
-        val raw = prefs.getString(KEY_RUNTIME, null) ?: return null
-        return try {
-            JSONObject(raw).optInt("index")
-        } catch (_: Exception) {
-            null
-        }
-    }
-
-    fun runtimeObservedCurrentContext(): Boolean {
-        val raw = prefs.getString(KEY_RUNTIME, null) ?: return false
-        return try {
-            JSONObject(raw).optBoolean("observedCurrentContext")
-        } catch (_: Exception) {
-            false
-        }
-    }
-
     fun clearAppState() {
         prefs.edit().clear().commit()
         spotifyAppRemoteService.reset()
@@ -372,23 +321,6 @@ class UiTestHarness : AutoCloseable {
             started = false
         }
         failure?.let { throw it }
-    }
-
-    private fun readTitlesFromPref(key: String): List<String> {
-        val raw = prefs.getString(key, null) ?: return emptyList()
-        return try {
-            val items = JSONArray(raw)
-            buildList {
-                for (index in 0 until items.length()) {
-                    val item = items.optJSONObject(index) ?: continue
-                    val title = item.optString("title")
-                    val uri = item.optString("uri")
-                    add(if (title.isNotBlank()) title else uri)
-                }
-            }
-        } catch (_: Exception) {
-            emptyList()
-        }
     }
 
     private fun serializeShuffleItems(items: List<ShuffleItem>): JSONArray {

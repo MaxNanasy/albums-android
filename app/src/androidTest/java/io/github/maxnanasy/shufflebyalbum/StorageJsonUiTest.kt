@@ -4,7 +4,6 @@ import androidx.test.espresso.action.ViewActions.click
 import androidx.test.espresso.action.ViewActions.closeSoftKeyboard
 import androidx.test.espresso.action.ViewActions.replaceText
 import androidx.test.espresso.action.ViewActions.scrollTo
-import androidx.test.espresso.assertion.ViewAssertions.doesNotExist
 import androidx.test.espresso.assertion.ViewAssertions.matches
 import androidx.test.espresso.matcher.ViewMatchers.Visibility.GONE
 import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
@@ -69,7 +68,7 @@ class StorageJsonUiTest : AbstractUiTestCase() {
         )
         Ui.Storage.importDataButton().perform(scrollTo(), click())
         waitUntil(label = "valid storage import") {
-            check(harness.savedItemTitles() == listOf("spotify:album:no-title"))
+            check(visibleSavedItemTitles() == listOf("spotify:album:no-title"))
             Ui.Playback.status().check(matches(withText("Data imported; session reset")))
         }
         Ui.Playback.nextButton().check(matches(not(isEnabled())))
@@ -87,7 +86,9 @@ class StorageJsonUiTest : AbstractUiTestCase() {
 
         launchMainActivity()
         Ui.SavedItems.removeButton("One").perform(click())
-        check(harness.removedItemTitles() == listOf("One"))
+        waitUntil(label = "removed item exported state") {
+            check(visibleRemovedItemTitles() == listOf("One"))
+        }
 
         Ui.Storage.exportDataButton().perform(scrollTo(), click())
         val exported = JSONObject(textOf(R.id.storageJsonInput).orEmpty())
@@ -109,16 +110,16 @@ class StorageJsonUiTest : AbstractUiTestCase() {
         Ui.Storage.importDataButton().perform(scrollTo(), click())
 
         waitUntil(label = "removed items import restore") {
-            check(harness.savedItemTitles() == listOf("Two"))
+            check(visibleSavedItemTitles() == listOf("Two"))
             Ui.RemovedItems.section().check(matches(withEffectiveVisibility(androidx.test.espresso.matcher.ViewMatchers.Visibility.VISIBLE)))
-            check(harness.removedItemTitles() == listOf("Restorable"))
+            check(visibleRemovedItemTitles() == listOf("Restorable"))
         }
 
         clickRecyclerActionByTitle(R.id.removedItemsRecycler, "Restorable", R.id.removeButton)
         waitUntil(label = "restored removed import item") {
-            check(harness.savedItemTitles() == listOf("Two", "Restorable"))
+            check(visibleSavedItemTitles() == listOf("Two", "Restorable"))
+            Ui.RemovedItems.section().check(matches(withEffectiveVisibility(GONE)))
         }
-        Ui.RemovedItems.section().check(matches(withEffectiveVisibility(GONE)))
     }
 
     @Test
@@ -132,5 +133,13 @@ class StorageJsonUiTest : AbstractUiTestCase() {
             check(textOf(R.id.storageJsonInput).orEmpty().isEmpty())
         }
         Ui.Toasts.instance("Unable to export saved items because stored data is invalid JSON").check(matches(isDisplayed()))
+    }
+
+    private fun visibleSavedItemTitles(): List<String> {
+        return textsInRecycler(R.id.itemRecycler, R.id.title)
+    }
+
+    private fun visibleRemovedItemTitles(): List<String> {
+        return textsInRecycler(R.id.removedItemsRecycler, R.id.title)
     }
 }

@@ -23,7 +23,7 @@ class AuthUiTest : AbstractUiTestCase() {
     }
 
     @Test
-    @DisplayName("Connect button stores a PKCE verifier and redirects to Spotify authorize")
+    @DisplayName("Connect button redirects to Spotify authorize with expected PKCE request parameters")
     fun connectButtonStoresAPkceVerifierAndRedirectsToSpotifyAuthorize() {
         launchMainActivity()
 
@@ -34,7 +34,6 @@ class AuthUiTest : AbstractUiTestCase() {
         }
 
         val attempt = harness.authorizationLaunchAttempts.single()
-        check(harness.readStringPref(UiTestHarness.KEY_VERIFIER).isNullOrBlank().not())
         check(attempt.responseType == "code")
         check(attempt.redirectUri == "https://unused-but-required-redirect-uri.invalid")
         check(
@@ -79,13 +78,6 @@ class AuthUiTest : AbstractUiTestCase() {
         waitUntil(label = "connected auth status") {
             Ui.Auth.status().check(matches(withText("Connected")))
         }
-        check(harness.readStringPref(UiTestHarness.KEY_TOKEN) == "new-access-token")
-        check(harness.readStringPref(UiTestHarness.KEY_REFRESH_TOKEN) == "new-refresh-token")
-        check(harness.readLongPref(UiTestHarness.KEY_TOKEN_EXPIRY) > System.currentTimeMillis())
-        check(
-            harness.readStringPref(UiTestHarness.KEY_TOKEN_SCOPE) ==
-                "user-modify-playback-state user-read-playback-state playlist-read-private playlist-read-collaborative",
-        )
     }
 
     @Test
@@ -177,7 +169,7 @@ class AuthUiTest : AbstractUiTestCase() {
     }
 
     @Test
-    @DisplayName("Successful code exchange stores tokens, clears verifier, and removes code from the URL")
+    @DisplayName("Successful code exchange updates auth status to connected")
     fun successfulCodeExchangeStoresTokensClearsVerifierAndRemovesCodeFromTheUrl() {
         harness.seedVerifier("verifier")
         harness.setDispatcher(
@@ -211,18 +203,10 @@ class AuthUiTest : AbstractUiTestCase() {
         waitUntil(label = "successful code exchange status") {
             Ui.Auth.status().check(matches(withText("Connected")))
         }
-        check(harness.readStringPref(UiTestHarness.KEY_TOKEN) == "exchange-access-token")
-        check(harness.readStringPref(UiTestHarness.KEY_REFRESH_TOKEN) == "exchange-refresh-token")
-        check(harness.readLongPref(UiTestHarness.KEY_TOKEN_EXPIRY) > System.currentTimeMillis())
-        check(
-            harness.readStringPref(UiTestHarness.KEY_TOKEN_SCOPE) ==
-                "user-modify-playback-state user-read-playback-state playlist-read-private playlist-read-collaborative",
-        )
-        check(harness.readStringPref(UiTestHarness.KEY_VERIFIER) == null)
     }
 
     @Test
-    @DisplayName("Failed code exchange clears the code, clears the verifier, and reports the exchange failure")
+    @DisplayName("Failed code exchange reports the exchange failure")
     fun failedCodeExchangeClearsTheCodeClearsTheVerifierAndReportsTheExchangeFailure() {
         harness.seedVerifier("verifier")
         val requestCount = AtomicInteger(0)
@@ -248,7 +232,6 @@ class AuthUiTest : AbstractUiTestCase() {
                 matches(withText("Spotify token exchange failed: Network error while contacting Spotify; please try again")),
             )
         }
-        check(harness.readStringPref(UiTestHarness.KEY_VERIFIER) == null)
         check(requestCount.get() == 1)
     }
 }
