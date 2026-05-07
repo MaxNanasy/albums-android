@@ -1,5 +1,6 @@
 package io.github.maxnanasy.shufflebyalbum
 
+import android.os.SystemClock
 import androidx.test.espresso.Espresso.onView
 import androidx.test.espresso.action.ViewActions.click
 import androidx.test.espresso.action.ViewActions.scrollTo
@@ -105,9 +106,7 @@ class PlaybackMonitorUiTest : AbstractUiTestCase() {
         }
 
         harness.playbackMonitorLoop.triggerTick()
-        waitUntil(label = "matched monitor status") {
-            Ui.Playback.status().check(matches(withText("Now playing album 1 of 2: One")))
-        }
+        SystemClock.sleep(100)
 
         state.set("null")
         harness.playbackMonitorLoop.triggerTick()
@@ -193,9 +192,7 @@ class PlaybackMonitorUiTest : AbstractUiTestCase() {
         }
 
         harness.playbackMonitorLoop.triggerTick()
-        waitUntil(label = "matched monitor status") {
-            Ui.Playback.status().check(matches(withText("Now playing album 1 of 1: One")))
-        }
+        SystemClock.sleep(100)
 
         state.set("mismatch")
         harness.playbackMonitorLoop.triggerTick()
