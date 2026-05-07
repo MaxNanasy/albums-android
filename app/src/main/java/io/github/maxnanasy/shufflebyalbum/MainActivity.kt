@@ -83,6 +83,7 @@ class MainActivity : AppCompatActivity() {
     private var connectingAppRemote = false
 
     private var undoSnackbar: Snackbar? = null
+    private var standardSnackbar: Snackbar? = null
     private val playbackMonitorLoop by lazy { playbackMonitorLoopFactory() }
     private val spotifyAuthLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -139,6 +140,12 @@ class MainActivity : AppCompatActivity() {
         super.onDestroy()
         stopMonitorLoop()
         appScope.cancel()
+    }
+
+    internal fun completeSpotifyAuthorizationForTest(response: AuthorizationResponse) {
+        appScope.launch {
+            handleSpotifyAuthorizationResponse(response)
+        }
     }
 
     private fun bindViews() {
@@ -272,6 +279,19 @@ class MainActivity : AppCompatActivity() {
             .setShowDialog(false)
             .setPkceInformation(pkceInformation)
             .build()
+
+        authorizationLaunchInterceptor?.let { interceptor ->
+            interceptor(
+                AuthorizationLaunchAttempt(
+                    responseType = "code",
+                    redirectUri = REDIRECT_URI,
+                    scopes = SCOPES,
+                    showDialog = false,
+                    codeChallengeMethod = "S256",
+                ),
+            )
+            return
+        }
 
         val intent = AuthorizationClient.createLoginActivityIntent(this, request)
         spotifyAuthLauncher.launch(intent)
@@ -514,7 +534,7 @@ class MainActivity : AppCompatActivity() {
 
         session = session.copy(
             activationState = ActivationState.ACTIVE,
-            queue = items.shuffled().toMutableList(),
+            queue = shuffleOverride?.invoke(items) ?: items.shuffled().toMutableList(),
             index = 0,
         )
         persistRuntimeState()
@@ -804,7 +824,7 @@ class MainActivity : AppCompatActivity() {
         val snackbar = Snackbar.make(
             findViewById(android.R.id.content),
             "Removed ${quotedTitle(item.title)}",
-            Snackbar.LENGTH_LONG,
+            snackbarDurationOverride ?: Snackbar.LENGTH_LONG,
         )
         snackbar.setAction("Undo") {
             restoreRemovedItemAtIndex(item, removedIndex)
@@ -1459,7 +1479,25 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun snackbar(message: String, duration: Int = Snackbar.LENGTH_SHORT) {
-        Snackbar.make(findViewById(android.R.id.content), message, duration).show()
+        val snackbar = Snackbar.make(
+            findViewById(android.R.id.content),
+            message,
+            snackbarDurationOverride ?: duration,
+        )
+        if (snackbarDurationOverride != null) {
+            standardSnackbar?.dismiss()
+            standardSnackbar = snackbar
+            snackbar.addCallback(
+                object : Snackbar.Callback() {
+                    override fun onDismissed(transientBottomBar: Snackbar?, event: Int) {
+                        if (standardSnackbar === transientBottomBar) {
+                            standardSnackbar = null
+                        }
+                    }
+                },
+            )
+        }
+        snackbar.show()
     }
 
     private fun reportError(
@@ -1540,6 +1578,9 @@ class MainActivity : AppCompatActivity() {
         internal var spotifyAppRemoteService: SpotifyAppRemoteService = RealSpotifyAppRemoteService
         internal val defaultPlaybackMonitorLoopFactory: () -> PlaybackMonitorLoop = { HandlerPlaybackMonitorLoop() }
         internal var playbackMonitorLoopFactory: () -> PlaybackMonitorLoop = defaultPlaybackMonitorLoopFactory
+        internal var authorizationLaunchInterceptor: ((AuthorizationLaunchAttempt) -> Unit)? = null
+        internal var shuffleOverride: ((List<ShuffleItem>) -> MutableList<ShuffleItem>)? = null
+        internal var snackbarDurationOverride: Int? = null
 
         private val SCOPES = listOf(
             "user-modify-playback-state",
@@ -1658,6 +1699,14 @@ data class ShuffleItem(
     val type: String,
     val uri: String,
     val title: String,
+)
+
+internal data class AuthorizationLaunchAttempt(
+    val responseType: String,
+    val redirectUri: String,
+    val scopes: List<String>,
+    val showDialog: Boolean,
+    val codeChallengeMethod: String,
 )
 
 private data class PlaylistAlbumImportResult(
