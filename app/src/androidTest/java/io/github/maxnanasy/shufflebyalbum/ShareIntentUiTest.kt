@@ -14,9 +14,11 @@ import okhttp3.mockwebserver.MockResponse
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
+import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 
 @DisplayName("Share Intent")
+@Tag("platform-specific")
 class ShareIntentUiTest : AbstractUiTestCase() {
     private lateinit var instrumentation: Instrumentation
     private lateinit var targetContext: Context
