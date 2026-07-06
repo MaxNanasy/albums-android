@@ -1,20 +1,94 @@
 #!/usr/bin/env python3
 
+import argparse
+from dataclasses import dataclass
 import difflib
 import subprocess
 import sys
 from pathlib import Path
 
 
-def ui_test_list(ref: str) -> list[str]:
-    script = Path(__file__).with_name('ui-test-list')
+@dataclass(frozen=True)
+class TestListSource:
+    folder: Path
+    revision: str | None
+    label: str
+
+
+def current_working_copy() -> Path:
     result = subprocess.run(
-        [sys.executable, str(script), ref],
+        ['git', 'rev-parse', '--show-toplevel'],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding='utf-8',
+        errors='surrogateescape',
+    )
+    if result.returncode == 0:
+        return Path(result.stdout.strip()).resolve()
+    return Path(__file__).resolve().parents[1]
+
+
+def resolve_folder(folder: str) -> Path:
+    return Path(folder).expanduser().resolve()
+
+
+def is_git_revision(value: str, folder: Path) -> bool:
+    result = subprocess.run(
+        ['git', 'rev-parse', '--verify', '--quiet', f'{value}^{{tree}}'],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding='utf-8',
+        errors='surrogateescape',
+        cwd=folder,
+    )
+    return result.returncode == 0
+
+
+def parse_test_list_source(value: str, default_folder: Path) -> TestListSource:
+    if ':' in value:
+        folder_text, revision = value.split(':', 1)
+        folder = default_folder if not folder_text else resolve_folder(folder_text)
+        folder_label = 'working copy' if not folder_text else folder_text
+        if revision:
+            label = revision if not folder_text else f'{folder_label}:{revision}'
+            return TestListSource(folder, revision, label)
+        return TestListSource(folder, None, folder_label)
+
+    is_folder = Path(value).expanduser().is_dir()
+    is_revision = is_git_revision(value, default_folder)
+    if is_folder and is_revision:
+        raise ValueError(
+            f"source '{value}' is ambiguous because it is both a folder and a git revision; "
+            f"use '{value}:' for the folder or ':{value}' for the revision"
+        )
+
+    if is_folder:
+        return TestListSource(resolve_folder(value), None, value)
+
+    return TestListSource(default_folder, value, value)
+
+
+def working_copy_source(default_folder: Path) -> TestListSource:
+    return TestListSource(default_folder, None, 'working copy')
+
+
+def ui_test_list(source: TestListSource, *, cross_platform: bool = False) -> list[str]:
+    script = source.folder / 'scripts' / 'ui-test-list'
+    command = [sys.executable, str(script)]
+    if cross_platform:
+        command.append('--cross-platform')
+    if source.revision is not None:
+        command.append(source.revision)
+    result = subprocess.run(
+        command,
         check=True,
         capture_output=True,
         text=True,
         encoding='utf-8',
         errors='surrogateescape',
+        cwd=source.folder,
     )
     return result.stdout.splitlines(keepends=True)
 
@@ -90,22 +164,58 @@ def suite_aware_unified_diff(
     return diff_lines
 
 
-def main() -> int:
-    if len(sys.argv) != 3:
-        print(f'Usage: {sys.argv[0]} <base-ref> <head-ref>', file=sys.stderr)
-        return 1
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description='Show UI test list changes.')
+    source_help = (
+        'UI test-list source as <folder>:<revision>, :<revision>, <folder>:, '
+        '<folder>, or <revision>; folders run their scripts/ui-test-list and omitted '
+        'revisions use working copy test files'
+    )
+    parser.add_argument(
+        'base_or_head_source',
+        metavar='source',
+        help=f'{source_help}. With one source, compare the current working copy against that source.',
+    )
+    parser.add_argument(
+        'head_source',
+        nargs='?',
+        metavar='source',
+        help=f'Optional head {source_help}. When provided, the first source is the base.',
+    )
+    parser.add_argument(
+        '--cross-platform',
+        action='store_true',
+        help='Forward --cross-platform to ui-test-list for normalized suite headings',
+    )
+    args = parser.parse_args()
+    default_folder = current_working_copy()
+    try:
+        if args.head_source is None:
+            args.base_source = parse_test_list_source(args.base_or_head_source, default_folder)
+            args.head_source = working_copy_source(default_folder)
+        else:
+            args.base_source = parse_test_list_source(args.base_or_head_source, default_folder)
+            args.head_source = parse_test_list_source(args.head_source, default_folder)
+    except ValueError as error:
+        parser.error(str(error))
+    del args.base_or_head_source
+    return args
 
-    base_ref = sys.argv[1]
-    head_ref = sys.argv[2]
-    base_lines = ui_test_list(base_ref)
-    head_lines = ui_test_list(head_ref)
+
+def main() -> int:
+    args = parse_args()
+    base_source = args.base_source
+    head_source = args.head_source
+
+    base_lines = ui_test_list(base_source, cross_platform=args.cross_platform)
+    head_lines = ui_test_list(head_source, cross_platform=args.cross_platform)
 
     diff = ''.join(
         suite_aware_unified_diff(
             base_lines,
             head_lines,
-            fromfile=f'{base_ref} test-list',
-            tofile=f'{head_ref} test-list',
+            fromfile=f'{base_source.label} test-list',
+            tofile=f'{head_source.label} test-list',
             n=1,
         )
     )
