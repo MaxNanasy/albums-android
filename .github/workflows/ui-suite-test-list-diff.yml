@@ -34,7 +34,7 @@ jobs:
           merge_base="$(git merge-base HEAD "origin/${BASE_REF}")"
           head_sha="$(git rev-parse HEAD)"
 
-          test_list_diff="$(scripts/ui-test-list-diff "${merge_base}" HEAD)"
+          test_list_diff="$(scripts/ui-test-list-diff ":${merge_base}" :HEAD)"
 
           printf 'Merge base: %s\n' "${merge_base}"
           printf 'Base branch: %s\n' "${BASE_REF}"
