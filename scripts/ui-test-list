@@ -24,6 +24,36 @@ TAG_ANNOTATION = 'Tag'
 
 CLASS_DECL_RE = re.compile(r'\b(?:class|interface|object)\s+([A-Za-z_]\w*)\b')
 IDENTIFIER_RE = re.compile(r'[A-Za-z_]\w*')
+PROPERTY_DECL_RE = re.compile(r'\b(?:val|var)\s+[A-Za-z_]\w*')
+DECLARATION_CONTINUATION_SUFFIXES = (
+    '=',
+    '.',
+    '?.',
+    '?:',
+    '->',
+    ',',
+    '+',
+    '-',
+    '*',
+    '/',
+    '%',
+    '&&',
+    '||',
+)
+DECLARATION_CONTINUATION_PREFIXES = (
+    '.',
+    '?.',
+    '?:',
+    '->',
+    ',',
+    '+',
+    '-',
+    '*',
+    '/',
+    '%',
+    '&&',
+    '||',
+)
 
 
 def git(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -222,6 +252,23 @@ def parse_annotation(text: str, index: int, limit: int) -> tuple[tuple[str, str 
     return (simple_name, value), annotation_end
 
 
+def declaration_can_end_at_newline(
+    text: str,
+    declaration: str,
+    newline_index: int,
+    limit: int,
+) -> bool:
+    stripped = declaration.strip()
+    if not bool(PROPERTY_DECL_RE.search(stripped)):
+        return False
+    if stripped.endswith(DECLARATION_CONTINUATION_SUFFIXES):
+        return False
+    next_index = skip_space_and_comments(text, newline_index + 1, limit)
+    return not any(
+        text.startswith(prefix, next_index) for prefix in DECLARATION_CONTINUATION_PREFIXES
+    )
+
+
 def collect_declaration(text: str, index: int, limit: int) -> tuple[str, str | None, int]:
     start = index
     paren_depth = 0
@@ -247,6 +294,10 @@ def collect_declaration(text: str, index: int, limit: int) -> tuple[str, str | N
                 bracket_depth -= 1
         elif ch in '{;' and paren_depth == 0 and bracket_depth == 0:
             return text[start:index], ch, index
+        elif ch == '\n' and paren_depth == 0 and bracket_depth == 0:
+            declaration = text[start:index]
+            if declaration_can_end_at_newline(text, declaration, index, limit):
+                return declaration, ch, index
         index += 1
     return text[start:limit], None, limit
 
