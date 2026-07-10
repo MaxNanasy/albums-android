@@ -24,7 +24,6 @@ jobs:
     uses: ./.github/workflows/build-apk-common.yml
     with:
       variant: debug
-    secrets: inherit
 
   release-build:
     # Do release builds for main pushes, or manual runs that choose release on the main branch only.
@@ -37,4 +36,8 @@ jobs:
     uses: ./.github/workflows/build-apk-common.yml
     with:
       variant: release
-    secrets: inherit
+    secrets:
+      RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+      RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+      RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+      RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}

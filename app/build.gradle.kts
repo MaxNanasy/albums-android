@@ -25,6 +25,9 @@ android {
     }
 
     signingConfigs {
+        getByName("debug") {
+            storeFile = rootProject.file("keystores/debug.keystore")
+        }
         create("env") {
             storeFile = System.getenv("SIGNING_STORE_FILE")?.let(::file)
             storePassword = System.getenv("SIGNING_STORE_PASSWORD")
@@ -35,12 +38,10 @@ android {
 
     buildTypes {
         debug {
-            signingConfig = signingConfigs.getByName("env")
             applicationIdSuffix = ".debug"
         }
         create("uiTest") {
             initWith(getByName("debug"))
-            signingConfig = signingConfigs.getByName("debug")
         }
         release {
             signingConfig = signingConfigs.getByName("env")
